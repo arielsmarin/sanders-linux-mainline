@@ -1,0 +1,46 @@
+#!/bin/bash
+# Baixa tarball Arch Linux ARM aarch64 e gera imagem ext4 3 GiB com label "rootfs".
+# Precisa sudo (mount loop + bsdtar preservando perms).
+#
+# Saída: $ROOTFS_IMG (em $BUILD)
+
+source "$(dirname "$0")/lib.sh"
+check_cmd bsdtar
+check_cmd mkfs.ext4
+
+if [ "$(id -u)" -ne 0 ]; then
+    msg "este script precisa de sudo. Reexecutando..."
+    exec sudo -E bash "$0" "$@"
+fi
+
+cd "$BUILD"
+
+if [ ! -f "$ARCH_TARBALL" ]; then
+    msg "baixando $ARCH_TARBALL_URL..."
+    curl -fLO "$ARCH_TARBALL_URL"
+fi
+
+MNT="$BUILD/_rootfs_mnt"
+mountpoint -q "$MNT" && umount "$MNT" || true
+rm -rf "$MNT"
+mkdir -p "$MNT"
+
+rm -f "$ROOTFS_IMG"
+msg "criando imagem ext4 3 GiB com LABEL=rootfs..."
+truncate -s 3G "$ROOTFS_IMG"
+mkfs.ext4 -L rootfs -F "$ROOTFS_IMG" >/dev/null
+
+msg "extraindo Arch Linux ARM tarball..."
+mount -o loop "$ROOTFS_IMG" "$MNT"
+bsdtar -xpf "$ARCH_TARBALL" -C "$MNT"
+
+# Permite login root via console serial
+echo "ttyMSM0" >> "$MNT/etc/securetty" 2>/dev/null || true
+echo "ttyGS0"  >> "$MNT/etc/securetty" 2>/dev/null || true
+
+sync
+umount "$MNT"
+rmdir "$MNT"
+
+msg "OK: $ROOTFS_IMG ($(du -h "$ROOTFS_IMG" | cut -f1))"
+msg "Login default Arch ARM: root/root  ou  alarm/alarm"

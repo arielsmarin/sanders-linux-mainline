@@ -1,0 +1,37 @@
+# Config fragment para o port do Moto G5s Plus (sanders) em kernel mainline.
+# Aplicado sobre arm64 defconfig.
+#
+# Uso:
+#   make ARCH=arm64 defconfig
+#   ./scripts/kconfig/merge_config.sh -m .config kernel/sanders.config.fragment
+#   make ARCH=arm64 olddefconfig
+
+# Framebuffer console (mostrar dmesg na tela do aparelho)
+CONFIG_FB=y
+CONFIG_FB_SIMPLE=y
+CONFIG_FRAMEBUFFER_CONSOLE=y
+CONFIG_FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER=y
+CONFIG_LOGO=y
+CONFIG_LOGO_LINUX_CLUT224=y
+
+# USB Gadget — CDC ACM como console serial via cabo USB.
+# Importante: builtin (=y), nao modulo (=m), pq o initramfs precisa criar
+# o gadget antes do rootfs estar montado.
+CONFIG_USB_GADGET=y
+CONFIG_USB_LIBCOMPOSITE=y
+CONFIG_USB_CONFIGFS=y
+CONFIG_USB_CONFIGFS_SERIAL=y
+CONFIG_USB_CONFIGFS_ACM=y
+CONFIG_USB_F_ACM=y
+CONFIG_U_SERIAL_CONSOLE=y
+
+# Controlador USB DWC3 (Qualcomm glue + core)
+CONFIG_USB_DWC3=y
+CONFIG_USB_DWC3_QCOM=y
+CONFIG_USB_DWC3_DUAL_ROLE=y
+CONFIG_USB_DWC3_GADGET=y
+
+# (Pendente — habilitar quando voce for trabalhar nestes hardwares)
+# CONFIG_RMI4_CORE=y       # touchscreen Synaptics RMI4
+# CONFIG_RMI4_I2C=y
+# CONFIG_RMI4_F11=y

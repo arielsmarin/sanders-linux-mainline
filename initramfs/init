@@ -1,0 +1,148 @@
+#!/bin/sh
+# Initramfs proof-of-life para Moto G5s Plus (sanders).
+# Espera UDC inicializar (probe pode demorar), configura CDC ACM, dropa shell.
+
+export PATH=/bin:/sbin
+
+/bin/mount -t proc     proc     /proc
+/bin/mount -t sysfs    sys      /sys
+/bin/mount -t devtmpfs dev      /dev
+/bin/mount -t tmpfs    tmpfs    /run
+/bin/mount -t tmpfs    tmpfs    /tmp
+/bin/mount -t configfs none /sys/kernel/config 2>/dev/null
+[ -d /sys/kernel/config ] || /bin/mount -t configfs none /sys/kernel/config
+
+echo "############################################################"
+echo "# sanders proof-of-life initramfs v3"
+echo "# $(uname -srm 2>/dev/null)"
+echo "############################################################"
+
+##
+## Sobe USB gadget CDC ACM. Espera UDC aparecer (probe deferral).
+##
+wait_for_udc() {
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+        UDC=$(ls /sys/class/udc/ 2>/dev/null | head -n1)
+        if [ -n "$UDC" ]; then
+            echo "$UDC"
+            return 0
+        fi
+        /bin/sleep 1
+    done
+    return 1
+}
+
+setup_usb_gadget() {
+    G=/sys/kernel/config/usb_gadget/g1
+    /bin/mkdir -p "$G" || return 1
+    echo 0x1d6b > "$G/idVendor"
+    echo 0x0104 > "$G/idProduct"
+    echo 0x0100 > "$G/bcdDevice"
+    echo 0x0200 > "$G/bcdUSB"
+    /bin/mkdir -p "$G/strings/0x409"
+    echo "lk2nd"               > "$G/strings/0x409/manufacturer"
+    echo "sanders-proofoflife" > "$G/strings/0x409/product"
+    echo "0001"                > "$G/strings/0x409/serialnumber"
+    /bin/mkdir -p "$G/configs/c.1/strings/0x409"
+    echo "CDC ACM" > "$G/configs/c.1/strings/0x409/configuration"
+    echo 250       > "$G/configs/c.1/MaxPower"
+    /bin/mkdir -p "$G/functions/acm.usb0"
+    /bin/ln -s "$G/functions/acm.usb0" "$G/configs/c.1/"
+    UDC="$1"
+    echo "[init] bindando gadget no UDC: $UDC"
+    echo "$UDC" > "$G/UDC"
+    return $?
+}
+
+echo "[init] aguardando UDC (USB controller) probar..."
+if UDC=$(wait_for_udc); then
+    echo "[init] UDC encontrado: $UDC"
+    if setup_usb_gadget "$UDC"; then
+        echo "[init] USB CDC ACM ATIVO. /dev/ttyACM0 deve aparecer no host."
+    else
+        echo "[init] !!! falha ao bindar UDC"
+    fi
+else
+    echo "[init] !!! nenhum UDC apos 20s. Conteudo de /sys/class/udc:"
+    /bin/ls -la /sys/class/udc/ 2>&1
+    echo "[init] dmesg | tail -30:"
+    /bin/dmesg | /bin/tail -30
+fi
+
+##
+## Aguarda ttyGS0 e expoe shell via cabo USB.
+##
+echo "[init] aguardando /dev/ttyGS0..."
+for i in 1 2 3 4 5 6 7 8 9 10; do
+    if [ -c /dev/ttyGS0 ]; then
+        echo "[init] /dev/ttyGS0 disponivel. Abrindo shell em background."
+        /bin/setsid /bin/sh -c '
+            while true; do
+                /bin/sh < /dev/ttyGS0 > /dev/ttyGS0 2>&1
+                sleep 1
+            done
+        ' &
+        break
+    fi
+    /bin/sleep 1
+done
+
+##
+## Tenta achar rootfs
+##
+echo "[init] procurando rootfs..."
+ROOT=""
+# Tenta 1: blkid -L (busybox blkid pode nao suportar)
+R=$(/bin/blkid -L rootfs 2>/dev/null)
+if [ -n "$R" ] && [ -b "$R" ]; then
+    ROOT="$R"
+fi
+# Tenta 2: iterar mmcblk0pNN e ler com sed
+if [ -z "$ROOT" ]; then
+    for p in /dev/mmcblk0p*; do
+        OUT=$(/bin/blkid "$p" 2>/dev/null)
+        echo "[init.blkid] $OUT"
+        LBL=$(echo "$OUT" | /bin/sed -n 's/.*LABEL="\([^"]*\)".*/\1/p')
+        FST=$(echo "$OUT" | /bin/sed -n 's/.*TYPE="\([^"]*\)".*/\1/p')
+        if [ "$LBL" = "rootfs" ] && [ "$FST" = "ext4" ]; then
+            ROOT="$p"
+            break
+        fi
+    done
+fi
+# Tenta 3: maior particao (provavelmente userdata) com ext4
+if [ -z "$ROOT" ]; then
+    BIGGEST_SZ=0
+    BIGGEST=""
+    for p in /dev/mmcblk0p*; do
+        N=$(/bin/basename "$p")
+        SZ=$(/bin/cat "/sys/block/mmcblk0/$N/size" 2>/dev/null)
+        FST=$(/bin/blkid "$p" 2>/dev/null | /bin/sed -n 's/.*TYPE="\([^"]*\)".*/\1/p')
+        if [ "$FST" = "ext4" ] && [ "${SZ:-0}" -gt "$BIGGEST_SZ" ]; then
+            BIGGEST_SZ=$SZ
+            BIGGEST=$p
+        fi
+    done
+    if [ -n "$BIGGEST" ]; then
+        ROOT=$BIGGEST
+        echo "[init] usando maior ext4: $ROOT ($BIGGEST_SZ sectors)"
+    fi
+fi
+echo "[init] ROOT=$ROOT"
+
+if [ -n "$ROOT" ] && /bin/mount -o rw "$ROOT" /new_root 2>/dev/null; then
+    if [ -x /new_root/sbin/init ] || [ -x /new_root/usr/lib/systemd/systemd ] || [ -x /new_root/usr/bin/init ]; then
+        echo "[init] switch_root para $ROOT"
+        /bin/umount /proc /sys /dev /run /tmp 2>/dev/null
+        exec /sbin/switch_root /new_root /sbin/init
+    fi
+fi
+
+##
+## Sem rootfs valido: fica em loop printando status, e expoe shell tambem
+## no console framebuffer/dmesg para apertar power+vol abre reboot.
+##
+echo "[init] *** modo proof-of-life: sem rootfs, mas /dev/ttyACM0 disponivel ***"
+echo "[init] partlabel: $(ls /dev/disk/by-partlabel 2>/dev/null)"
+echo "[init] mmcblk:    $(ls /dev/mmcblk* 2>/dev/null)"
+exec /bin/sh

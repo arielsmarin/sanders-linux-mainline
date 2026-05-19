@@ -1,0 +1,31 @@
+# Build artifacts e fontes externos (não versionar)
+build/
+out/
+
+# Tarballs e binários grandes
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.img
+*.dtb
+*.dtbo
+*.cpio
+*.cpio.gz
+*.bin
+*.elf
+busybox
+
+# Editor/OS
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Backup
+*.bak
+*.orig
+
+# Logs
+*.log

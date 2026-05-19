@@ -1,0 +1,4 @@
+init
+mount
+switch_root
+umount

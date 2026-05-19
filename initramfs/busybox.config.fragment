@@ -1,0 +1,7 @@
+# Fragment aplicado sobre `make defconfig` do busybox.
+# Necessario: build static aarch64. CONFIG_TC desabilitado pq quebra com
+# headers Linux atuais (struct tc_cbq_wrropt removida do iproute2 headers).
+
+CONFIG_STATIC=y
+CONFIG_STATIC_LIBGCC=y
+# CONFIG_TC is not set

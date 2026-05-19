@@ -1,0 +1,42 @@
+#!/bin/bash
+# Monta a arvore do initramfs:
+#   - busybox + symlinks de /bin e /sbin
+#   - script /init
+#   - mountpoints virtuais
+# Compacta em cpio.gz.
+#
+# Saida: $OUT/initramfs.cpio.gz
+
+source "$(dirname "$0")/lib.sh"
+check_cmd cpio
+check_cmd gzip
+
+BB="$BUSYBOX_SRC/busybox"
+[ -x "$BB" ] || die "busybox nao compilado. Rode 03-build-busybox.sh primeiro."
+
+msg "limpando $INITRAMFS_ROOT..."
+rm -rf "$INITRAMFS_ROOT"
+mkdir -p "$INITRAMFS_ROOT"/{bin,sbin,etc,proc,sys,dev,new_root,run,tmp,mnt}
+mkdir -p "$INITRAMFS_ROOT/sys/kernel/config"
+
+msg "copiando busybox e criando symlinks..."
+cp "$BB" "$INITRAMFS_ROOT/bin/busybox"
+chmod +x "$INITRAMFS_ROOT/bin/busybox"
+
+while read -r app; do
+    [ -z "$app" ] && continue
+    ln -sf busybox "$INITRAMFS_ROOT/bin/$app"
+done < "$REPO/initramfs/busybox-symlinks-bin.txt"
+
+while read -r app; do
+    [ -z "$app" ] && continue
+    ln -sf ../bin/busybox "$INITRAMFS_ROOT/sbin/$app"
+done < "$REPO/initramfs/busybox-symlinks-sbin.txt"
+
+msg "instalando /init..."
+cp "$REPO/initramfs/init" "$INITRAMFS_ROOT/init"
+chmod +x "$INITRAMFS_ROOT/init"
+
+msg "compactando em $OUT/initramfs.cpio.gz..."
+(cd "$INITRAMFS_ROOT" && find . | cpio -o -H newc 2>/dev/null) | gzip -9 > "$OUT/initramfs.cpio.gz"
+msg "OK: $OUT/initramfs.cpio.gz ($(du -h "$OUT/initramfs.cpio.gz" | cut -f1))"
