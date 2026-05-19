@@ -38,6 +38,16 @@ bsdtar -xpf "$ARCH_TARBALL" -C "$MNT"
 echo "ttyMSM0" >> "$MNT/etc/securetty" 2>/dev/null || true
 echo "ttyGS0"  >> "$MNT/etc/securetty" 2>/dev/null || true
 
+# Autologin root no tty1 (framebuffer console) — sem teclado USB ainda,
+# então pelo menos garantimos shell ativo na tela em vez de prompt parado.
+msg "instalando autologin root no tty1..."
+mkdir -p "$MNT/etc/systemd/system/getty@tty1.service.d"
+cat > "$MNT/etc/systemd/system/getty@tty1.service.d/autologin.conf" <<'EOF'
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin root --noclear %I 38400 linux
+EOF
+
 sync
 umount "$MNT"
 rmdir "$MNT"

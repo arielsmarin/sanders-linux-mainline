@@ -9,7 +9,7 @@
 | Kernel mainline boot | ✅ | Linux master (~v6.x), defconfig + fragment |
 | eMMC | ✅ | `mmcblk0` 29.1 GiB, GPT, todas 54 partições visíveis |
 | ext4 rootfs | ✅ | Montado via `blkid -L rootfs` (sem udev no initramfs) |
-| systemd / userspace Arch ARM | ✅ | Boot até `archlinuxarm login:` |
+| systemd / userspace Arch ARM | ✅ | Boot até shell root (autologin no tty1 via drop-in `getty@tty1.service.d/autologin.conf`) |
 | Framebuffer console | ✅ | `simple-framebuffer` do bootloader; rotated portrait |
 | USB CDC ACM (console serial via cabo USB) | ❌ | `dwc3: failed to initialize core` |
 | Touchscreen Focaltech FT5436 | ✅ | Reportando eventos ABS/KEY/SYN limpos. Probe via patch (driver mainline `edt-ft5x06` precisa skip-identify). |
@@ -34,8 +34,9 @@ gcc-msm8953 1000000.clock-controller: sync_state() pending due to e3000.rng
 ```
 
 **Impacto:** sem CDC ACM, não conseguimos console interativo via cabo USB.
-Touchscreen agora funciona (ver abaixo), mas digitar no console framebuffer
-ainda precisaria de teclado virtual.
+Touchscreen agora funciona (ver abaixo) e autologin já entrega shell root no
+framebuffer, mas digitar no console ainda precisaria de teclado virtual ou
+USB-OTG.
 
 **Hipóteses:**
 - Clock ou regulator do `hsusb_phy` (PHY USB 2.0) não está sendo
