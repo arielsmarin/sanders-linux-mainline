@@ -7,9 +7,12 @@ o kernel Linux mainline upstream. Não há porte oficial em
 [postmarketOS](https://postmarketos.org/),
 [Mobian](https://mobian-project.org/) ou outras distros para mobile.
 
-> ⚠️ **Estado: proof-of-life.** O sistema boota até o `archlinuxarm login:`
-> prompt, mas hoje **não há input funcional** (USB CDC ACM falha, touchscreen
-> e Wi-Fi não habilitados ainda). Veja [`docs/HARDWARE_STATUS.md`](docs/HARDWARE_STATUS.md).
+> ⚠️ **Estado: proof-of-life + touchscreen funcional.** O sistema boota até
+> o `archlinuxarm login:` prompt, e o **touchscreen Focaltech FT5436 reporta
+> eventos limpos** (ABS multi-touch + BTN_TOUCH) em `/dev/input/event1`.
+> Ainda faltam: USB CDC ACM (DWC3 falha), Wi-Fi, áudio, painel real,
+> teclado virtual (necessário para login interativo). Veja
+> [`docs/HARDWARE_STATUS.md`](docs/HARDWARE_STATUS.md).
 
 | | |
 |---|---|

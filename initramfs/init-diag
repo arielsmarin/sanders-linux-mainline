@@ -1,0 +1,67 @@
+#!/bin/sh
+# Initramfs de DIAGNOSTICO. NAO faz switch_root.
+# Mostra info do touchscreen RMI4 / DWC3 na tela em loop para fotografar.
+
+export PATH=/bin:/sbin
+
+/bin/mount -t proc     proc /proc
+/bin/mount -t sysfs    sys  /sys
+/bin/mount -t devtmpfs dev  /dev
+/bin/mount -t tmpfs    tmp  /tmp
+
+# Espera um pouco para drivers probarem (rmi4 pode demorar via i2c).
+/bin/sleep 5
+
+dump() {
+    /bin/clear 2>/dev/null
+    echo "=========================================="
+    echo " SANDERS DIAG  $(date 2>/dev/null || echo n/a)"
+    echo "=========================================="
+
+    echo ""
+    echo "--- dmesg | rmi/synap/touch ---"
+    /bin/dmesg | /bin/grep -iE 'rmi|synap|touch' | /bin/tail -20
+
+    echo ""
+    echo "--- dmesg | dwc3/xhci/usb ---"
+    /bin/dmesg | /bin/grep -iE 'dwc3|xhci|usb|gadget' | /bin/tail -10
+
+    echo ""
+    echo "--- dmesg | i2c_3 / 78b8000 ---"
+    /bin/dmesg | /bin/grep -iE 'i2c|78b8000' | /bin/tail -8
+
+    echo ""
+    echo "--- dmesg | regulator l22/l6 ---"
+    /bin/dmesg | /bin/grep -iE 'regulator|l22|l6|pm8953' | /bin/tail -6
+
+    echo ""
+    echo "--- /sys/bus/i2c/devices ---"
+    /bin/ls /sys/bus/i2c/devices/ 2>/dev/null
+
+    echo ""
+    echo "--- /sys/bus/i2c/drivers (rmi*) ---"
+    /bin/ls -d /sys/bus/i2c/drivers/rmi* 2>/dev/null || echo "(nenhum driver rmi*)"
+    /bin/ls -d /sys/bus/spi/drivers/rmi* 2>/dev/null
+
+    echo ""
+    echo "--- /proc/bus/input/devices ---"
+    /bin/cat /proc/bus/input/devices 2>/dev/null | /bin/head -30
+
+    echo ""
+    echo "--- /dev/input/ ---"
+    /bin/ls /dev/input/ 2>/dev/null
+
+    echo ""
+    echo "--- dmesg final 5 linhas ---"
+    /bin/dmesg | /bin/tail -5
+
+    echo ""
+    echo "=========================================="
+    echo " loop. fotografe quando estabilizar."
+    echo "=========================================="
+}
+
+while true; do
+    dump
+    /bin/sleep 30
+done

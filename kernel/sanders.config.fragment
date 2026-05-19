@@ -31,7 +31,10 @@ CONFIG_USB_DWC3_QCOM=y
 CONFIG_USB_DWC3_DUAL_ROLE=y
 CONFIG_USB_DWC3_GADGET=y
 
-# (Pendente — habilitar quando voce for trabalhar nestes hardwares)
-# CONFIG_RMI4_CORE=y       # touchscreen Synaptics RMI4
-# CONFIG_RMI4_I2C=y
-# CONFIG_RMI4_F11=y
+# Touchscreen Focaltech FT5436 (descoberto via DTB stock Android: i2c@78b7000
+# addr 0x38, VDD=pm8953_l10, VCC_I2C=pm8953_l5). Driver mainline edt-ft5x06
+# suporta variante ft5426 que e compativel com ft5436. Builtin para ter input
+# disponivel desde o early boot.
+CONFIG_INPUT_EVDEV=y
+CONFIG_INPUT_TOUCHSCREEN=y
+CONFIG_TOUCHSCREEN_EDT_FT5X06=y

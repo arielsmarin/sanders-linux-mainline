@@ -12,7 +12,7 @@
 | systemd / userspace Arch ARM | ✅ | Boot até `archlinuxarm login:` |
 | Framebuffer console | ✅ | `simple-framebuffer` do bootloader; rotated portrait |
 | USB CDC ACM (console serial via cabo USB) | ❌ | `dwc3: failed to initialize core` |
-| Touchscreen Synaptics RMI4 | ❌ | DTS já descreve; drivers RMI4 desativados no defconfig |
+| Touchscreen Focaltech FT5436 | ✅ | Reportando eventos ABS/KEY/SYN limpos. Probe via patch (driver mainline `edt-ft5x06` precisa skip-identify). |
 | Wi-Fi (QCA) | ❌ | Sem firmware, sem driver builtin |
 | Bluetooth | ❌ | — |
 | Display "de verdade" (painel Tianma NT35596 ou DJN ILI7807D) | ❌ | Driver mainline inexistente, hoje só simple-framebuffer |
@@ -34,7 +34,8 @@ gcc-msm8953 1000000.clock-controller: sync_state() pending due to e3000.rng
 ```
 
 **Impacto:** sem CDC ACM, não conseguimos console interativo via cabo USB.
-Sem touchscreen e sem teclado, isso bloqueia uso real.
+Touchscreen agora funciona (ver abaixo), mas digitar no console framebuffer
+ainda precisaria de teclado virtual.
 
 **Hipóteses:**
 - Clock ou regulator do `hsusb_phy` (PHY USB 2.0) não está sendo
@@ -53,21 +54,33 @@ Sem touchscreen e sem teclado, isso bloqueia uso real.
 3. Tentar `dr_mode = "otg"` em vez de `"peripheral"`.
 4. Habilitar `CONFIG_USB_DWC3_VERBOSE=y` e ler dmesg completo.
 
-### Touchscreen Synaptics RMI4
+### Touchscreen Focaltech FT5436 — ✅ FUNCIONANDO
 
-DTS atual já descreve `touchscreen@20` em `&i2c_3` (copiado do potter).
-Falta apenas habilitar o driver:
+Diferente do irmão `potter` (Moto G5 Plus, Synaptics RMI4 @ 0x20), o
+`sanders` (G5s Plus) usa **Focaltech FT5436 @ 0x38** com:
+- Bus: `i2c@78b7000` (= `i2c_3` no mainline)
+- IRQ: `&tlmm 65 IRQ_TYPE_EDGE_FALLING`
+- Reset: GPIO 64 (fixado HIGH via `gpio-hog`)
+- VDD: `pm8953_l10` @ 2.85V (`regulator-always-on`)
+- VCC_I2C: `pm8953_l5` @ 1.8V
+- I2C clock: 400kHz (sem DMA)
 
-```
-CONFIG_RMI4_CORE=y
-CONFIG_RMI4_I2C=y
-CONFIG_RMI4_F11=y     # 2D pointing
-CONFIG_RMI4_F30=y     # GPIO/LED (opcional)
-```
+Driver: `edt-ft5x06` mainline (compatible `focaltech,ft5426`), **com patch
+necessário** porque o FT5436 não expõe o registro `0xBB` que o
+`edt_ft5x06_ts_identify()` lê — sem o patch o probe falha com `-110`
+(ETIMEDOUT). Patch: `kernel/0001-edt-ft5x06-skip-identify-for-ft5436.patch`.
 
-Após habilitar, espera-se `/dev/input/eventN` mapeando para o touch.
+Após boot, aparece `/dev/input/event1` reportando `ABS_MT_POSITION_X/Y`
+(multi-touch protocol B) + `BTN_TOUCH` + `SYN_REPORT`. Confirmado com
+2659 eventos / 10s de toque (ABS=2099 KEY=24 SYN=536).
+
+Descoberta-chave: o **endereço, chip e reguladores corretos foram
+extraídos do DTB Android stock** (`SANDERS_RETAIL_7.1.1...` boot.img →
+QCDT v3 LZ4-compressed → dtb individual → procurar `touch`). Sem isso,
+seguíamos chutando "deve ser igual ao potter".
+
 Para teclado virtual seria necessário stack gráfica (Weston/Phosh/Sxmo),
-que é outro nível de trabalho.
+que é outro nível de trabalho — mas o touch em si está pronto.
 
 ### Wi-Fi
 

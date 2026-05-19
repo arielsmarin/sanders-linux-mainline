@@ -30,6 +30,18 @@ if ! grep -q "$DTS_NAME.dtb" "$DTS_DIR/Makefile"; then
     echo "dtb-\$(CONFIG_ARCH_QCOM) += $DTS_NAME.dtb" >> "$DTS_DIR/Makefile"
 fi
 
+# Aplica patches do sanders (touchscreen FT5436, etc.) — idempotente.
+for p in "$REPO"/kernel/*.patch; do
+    [ -f "$p" ] || continue
+    msg "checando patch $(basename "$p")..."
+    if ! git -C "$LINUX_SRC" apply --check --reverse "$p" 2>/dev/null; then
+        git -C "$LINUX_SRC" apply "$p" || die "falha aplicando $p"
+        msg "  aplicado."
+    else
+        msg "  ja aplicado, pulando."
+    fi
+done
+
 if [ ! -f .config ]; then
     msg "make defconfig (arm64)..."
     make ARCH=arm64 CROSS_COMPILE="$ARM64_TC" defconfig

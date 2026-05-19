@@ -137,3 +137,44 @@ sh: line 1: bison: command not found
 
 Sempre rode `make olddefconfig` após mexer no `.config` para o kernel
 expandir dependências. O script `02-build-kernel.sh` já faz isso.
+
+## 11. Touchscreen "probe failed (-110)" no FT5436
+
+**Sintoma:**
+```
+edt_ft5x06 0-0038: touchscreen probe failed
+edt_ft5x06 0-0038: probe with driver edt_ft5x06 failed with error -110
+```
+
+**Causa:** O FT5436 do sanders não expõe o registrador `0xBB` (nome do
+modelo) que o `edt_ft5x06_ts_identify()` do driver mainline lê. Logo o
+probe aborta com `-ETIMEDOUT` antes de qualquer touch funcionar.
+
+**Solução:** patch incluso em `kernel/0001-edt-ft5x06-skip-identify-for-ft5436.patch`
+— em vez de abortar quando o identify falha, assume defaults de "generic
+ft5x06" (M09, sem regmap separado). O script `02-build-kernel.sh` aplica
+o patch automaticamente.
+
+## 12. Descobrir o chip de touch/sensor real do sanders
+
+Sanders **não é igual ao potter**. Mesmo CPU (msm8953), mesmo board family
+Motorola, mas componentes do board diferentes (touchscreen, painel,
+sensores, talvez Wi-Fi cal). Para descobrir o chip real de algum periférico:
+
+```bash
+# Extrair DTB do Android stock
+python3 unpack_bootimg.py SANDERS_..._boot.img /tmp/stock
+# O DT vem comprimido em LZ4:
+lz4 -d /tmp/stock/dt /tmp/stock/dt.bin
+# QCDT v3, várias DTBs concatenadas. Extrair a do sanders:
+python3 qcdt_extract.py /tmp/stock/dt.bin /tmp/stock/dtbs
+# Decompilar:
+dtc -I dtb -O dts -o /tmp/sanders-stock.dts /tmp/stock/dtbs/00_*.dtb
+# Procurar o chip:
+grep -E 'touch|focaltech|synaptics|atmel|wcnss|bluetooth' /tmp/sanders-stock.dts
+```
+
+Scripts auxiliares em `tools/unpack_bootimg.py` e `tools/qcdt_extract.py`.
+Sem esse passo, "deve ser igual ao potter" é um chute caro — no caso do
+touch, custou muitas iterações até descobrir que o sanders usa Focaltech
+FT5436 (não Synaptics RMI4 como o potter).

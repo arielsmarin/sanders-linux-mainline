@@ -118,22 +118,33 @@
 
 &i2c_3 {
 	status = "okay";
+	clock-frequency = <400000>;	/* stock Android usa 400kHz no FT5436 */
 
-	touchscreen@20 {
-		reg = <0x20>;
-		compatible = "syna,rmi4-i2c";
+	/* Forca PIO (sem DMA) — o controller mainline pode estar com
+	 * bug DMA em transactions especificas do FT5436. */
+	/delete-property/ dmas;
+	/delete-property/ dma-names;
+
+	/* Moto G5s Plus stock Android usa Focaltech FT5436 @ 0x38 com
+	 * VDD em pm8953_l10 (2.85V, always-on) e VCC_I2C em pm8953_l5
+	 * (1.8V). Reset GPIO 64, IRQ GPIO 65. (Nao Synaptics RMI4 como
+	 * o irmao potter.) */
+	touchscreen@38 {
+		reg = <0x38>;
+		compatible = "focaltech,ft5426";
 
 		interrupt-parent = <&tlmm>;
 		interrupts = <65 IRQ_TYPE_EDGE_FALLING>;
 
-		pinctrl-names = "default";
-		pinctrl-0 = <&ts_reset>;
+		/* Reset GPIO controlado via gpio-hog (sempre HIGH) — o pulse
+		 * curto do driver (~5ms) estava deixando o chip num estado
+		 * de boot e o regmap_bulk_read dava -ETIMEDOUT. */
 
-		vdd-supply = <&pm8953_l22>;
-		vio-supply = <&pm8953_l6>;
+		vcc-supply = <&pm8953_l10>;
+		iovcc-supply = <&pm8953_l5>;
 
-		syna,reset-delay-ms = <200>;
-		syna,startup-delay-ms = <500>;
+		touchscreen-size-x = <1080>;
+		touchscreen-size-y = <1920>;
 	};
 };
 
@@ -225,8 +236,11 @@
 		};
 
 		pm8953_l10: l10 {
-			regulator-min-microvolt = <1800000>;
-			regulator-max-microvolt = <1800000>;
+			/* Touchscreen FT5436 VDD (2.85V). Stock Android tem
+			 * always-on para manter o chip alimentado sempre. */
+			regulator-min-microvolt = <2850000>;
+			regulator-max-microvolt = <2850000>;
+			regulator-always-on;
 		};
 
 		pm8953_l11: l11 {
@@ -300,11 +314,20 @@
 &tlmm {
 	gpio-reserved-ranges = <1 2>, <96 4>, <111 1>, <126 1>;
 
+	/* Mantem o touchscreen FT5436 sempre fora de reset. */
+	ts-reset-hog {
+		gpio-hog;
+		gpios = <64 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "touchscreen-reset";
+	};
+
 	ts_reset: ts-reset-state {
 		pins = "gpio64";
 		function = "gpio";
 		drive-strength = <2>;
 		bias-pull-up;
+		output-high;
 	};
 };
 
