@@ -12,6 +12,7 @@
 | systemd / userspace Arch ARM | ✅ | Boot até shell root (autologin no tty1 via drop-in `getty@tty1.service.d/autologin.conf`) |
 | Framebuffer console | ✅ | `simple-framebuffer` do bootloader; rotated portrait |
 | USB CDC ACM (console serial via cabo USB) | ✅ | Autologin root via `serial-getty@ttyGS0` do systemd. Estável após drop-in com `TTYReset/Hangup/VTDisallocate=no` + udev no-autosuspend. |
+| USB CDC ECM (rede sobre cabo USB) | ✅ | `usb0` no phone @ 10.42.0.2/24, host @ 10.42.0.1/24. NAT no host via `scripts/08-host-net.sh` da acesso a internet (`ping google.com` ~10ms). NCM testado mas perdia RX no host — trocado por ECM. SSH interativo a validar com ECM. |
 | Touchscreen Focaltech FT5436 | ✅ | Reportando eventos ABS/KEY/SYN limpos. Probe via patch (driver mainline `edt-ft5x06` precisa skip-identify). |
 | Wi-Fi (QCA) | ❌ | Sem firmware, sem driver builtin |
 | Bluetooth | ❌ | — |

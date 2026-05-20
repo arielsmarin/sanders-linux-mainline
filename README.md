@@ -7,11 +7,13 @@ o kernel Linux mainline upstream. Não há porte oficial em
 [postmarketOS](https://postmarketos.org/),
 [Mobian](https://mobian-project.org/) ou outras distros para mobile.
 
-> ✅ **Estado: sistema interativo via cabo USB.** Boot completo do kernel
-> mainline → Arch Linux ARM → autologin root no framebuffer + **shell via
-> CDC ACM no host** (`/dev/ttyACM0`) com autologin pelo `serial-getty@ttyGS0`
-> do systemd. Touchscreen Focaltech FT5436 reportando eventos limpos em
-> `/dev/input/event1`. Pendências: Wi-Fi, áudio, painel real.
+> ✅ **Estado: sistema interativo via cabo USB + internet.** Boot completo
+> do kernel mainline → Arch Linux ARM → autologin root no framebuffer +
+> **shell via CDC ACM no host** (`/dev/ttyACM0`) + **rede USB (ECM)** com
+> NAT no host fornecendo **acesso à internet** (`ping google.com` ~10ms via
+> cabo). Touchscreen Focaltech FT5436 reportando eventos limpos em
+> `/dev/input/event1`. Pendências: Wi-Fi nativo, áudio, painel real, SSH
+> interativo estável (link USB ainda é a única ponte de rede).
 > Veja [`docs/HARDWARE_STATUS.md`](docs/HARDWARE_STATUS.md).
 
 | | |
@@ -127,6 +129,8 @@ Build artifacts vão para `build/` e `build/out/` (gitignored).
 - getty no tty1 com **autologin root** (shell root pronto no framebuffer)
 - Touchscreen Focaltech FT5436 reportando eventos em `/dev/input/event1`
 - **USB CDC ACM** funcional e estável — autologin root via `picocom /dev/ttyACM0` no host
+- **Rede USB CDC ECM** + NAT no host — phone navega a internet pelo cabo USB (`scripts/08-host-net.sh` configura o lado do PC)
+- **sshd** habilitado no rootfs (root/root) — escutando em 10.42.0.2
 
 ❌ **Pendente**
 - Teclado virtual / stack gráfica (Weston/Phosh/Sxmo) — pra usar o touch pra digitar

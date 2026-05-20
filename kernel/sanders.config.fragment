@@ -24,6 +24,13 @@ CONFIG_USB_CONFIGFS_SERIAL=y
 CONFIG_USB_CONFIGFS_ACM=y
 CONFIG_USB_F_ACM=y
 CONFIG_U_SERIAL_CONSOLE=y
+# USB ethernet gadget (ECM) — pra ter rede sobre o mesmo cabo USB.
+# Trocamos NCM por ECM: NCM agrega pacotes em superblocos, e o cdc_ncm
+# no host estava perdendo bursts (host RX << phone TX). ECM eh 1:1 sem
+# agregacao, mais estavel.
+CONFIG_USB_CONFIGFS_ECM=y
+CONFIG_USB_F_ECM=y
+CONFIG_USB_U_ETHER=y
 
 # Controlador USB DWC3 (Qualcomm glue + core)
 CONFIG_USB_DWC3=y

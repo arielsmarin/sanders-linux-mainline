@@ -74,6 +74,49 @@ cat > "$MNT/etc/udev/rules.d/50-usb-gadget-noautosuspend.rules" <<'EOF'
 ACTION=="add", SUBSYSTEM=="usb", TEST=="power/control", ATTR{power/control}="on"
 EOF
 
+# Rede USB (NCM gadget): IP estatico 10.42.0.2/24 em usb0 via systemd-networkd.
+# Host fica com 10.42.0.1/24. Match por MAC pra nao depender do nome da iface.
+msg "configurando systemd-networkd em usb0 (10.42.0.2/24)..."
+mkdir -p "$MNT/etc/systemd/network"
+cat > "$MNT/etc/systemd/network/10-usb0.network" <<'EOF'
+[Match]
+MACAddress=02:55:44:33:22:11
+
+[Network]
+Address=10.42.0.2/24
+Gateway=10.42.0.1
+DNS=8.8.8.8
+DNS=1.1.1.1
+ConfigureWithoutCarrier=yes
+
+[Route]
+Destination=0.0.0.0/0
+Gateway=10.42.0.1
+# Metrica alta pra nao competir com wlan se um dia tiver — usb gadget eh
+# rede de servico, nao a saida primaria.
+Metric=100
+EOF
+# resolv.conf gerenciado por systemd-resolved (que pega DNS do networkd)
+ln -sf /run/systemd/resolve/stub-resolv.conf "$MNT/etc/resolv.conf"
+ln -sf /usr/lib/systemd/system/systemd-resolved.service \
+    "$MNT/etc/systemd/system/multi-user.target.wants/systemd-resolved.service"
+mkdir -p "$MNT/etc/systemd/system/multi-user.target.wants"
+mkdir -p "$MNT/etc/systemd/system/sockets.target.wants"
+ln -sf /usr/lib/systemd/system/systemd-networkd.service \
+    "$MNT/etc/systemd/system/multi-user.target.wants/systemd-networkd.service"
+ln -sf /usr/lib/systemd/system/systemd-networkd.socket \
+    "$MNT/etc/systemd/system/sockets.target.wants/systemd-networkd.socket"
+
+# SSH: permite login root com senha (padrao Arch ARM eh "root"). Habilita sshd.
+msg "habilitando sshd com PermitRootLogin yes..."
+mkdir -p "$MNT/etc/ssh/sshd_config.d"
+cat > "$MNT/etc/ssh/sshd_config.d/10-sanders.conf" <<'EOF'
+PermitRootLogin yes
+PasswordAuthentication yes
+EOF
+ln -sf /usr/lib/systemd/system/sshd.service \
+    "$MNT/etc/systemd/system/multi-user.target.wants/sshd.service"
+
 sync
 umount "$MNT"
 rmdir "$MNT"
