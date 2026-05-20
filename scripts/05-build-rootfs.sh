@@ -47,6 +47,16 @@ if command -v arch-chroot >/dev/null && [ -f /proc/sys/fs/binfmt_misc/qemu-aarch
     arch-chroot "$MNT" pacman-key --init >/dev/null 2>&1 || warn "pacman-key --init falhou"
     arch-chroot "$MNT" pacman-key --populate archlinuxarm >/dev/null 2>&1 \
         || warn "pacman-key --populate archlinuxarm falhou"
+    # Locale pt_BR.UTF-8 (+ en_US.UTF-8 como fallback). Habilita as
+    # entradas em /etc/locale.gen e compila com locale-gen. O LANG=
+    # default vai em rootfs-overlay/common/etc/locale.conf.
+    msg "habilitando locale pt_BR.UTF-8 + en_US.UTF-8..."
+    arch-chroot "$MNT" sed -i \
+        -e 's/^#\(pt_BR.UTF-8 UTF-8\)/\1/' \
+        -e 's/^#\(en_US.UTF-8 UTF-8\)/\1/' \
+        /etc/locale.gen
+    arch-chroot "$MNT" locale-gen >/dev/null 2>&1 || warn "locale-gen falhou"
+
     # Samba: util pros dois flavors (compartilhar /home via Wi-Fi/USB).
     # Nao habilita servico — usuario decide com `systemctl enable smb nmb`.
     msg "instalando samba (sem habilitar smb/nmb)..."
