@@ -9,9 +9,9 @@ o kernel Linux mainline upstream. Não há porte oficial em
 
 > ✅ **Estado: sistema interativo via cabo USB.** Boot completo do kernel
 > mainline → Arch Linux ARM → autologin root no framebuffer + **shell via
-> CDC ACM no host** (`/dev/ttyACM0`). Touchscreen Focaltech FT5436
-> reportando eventos limpos em `/dev/input/event1`. Pendências: travamentos
-> intermitentes do CDC ACM (a investigar), Wi-Fi, áudio, painel real.
+> CDC ACM no host** (`/dev/ttyACM0`) com autologin pelo `serial-getty@ttyGS0`
+> do systemd. Touchscreen Focaltech FT5436 reportando eventos limpos em
+> `/dev/input/event1`. Pendências: Wi-Fi, áudio, painel real.
 > Veja [`docs/HARDWARE_STATUS.md`](docs/HARDWARE_STATUS.md).
 
 | | |
@@ -126,10 +126,9 @@ Build artifacts vão para `build/` e `build/out/` (gitignored).
 - Boot do systemd
 - getty no tty1 com **autologin root** (shell root pronto no framebuffer)
 - Touchscreen Focaltech FT5436 reportando eventos em `/dev/input/event1`
-- **USB CDC ACM** funcional — login interativo via `picocom /dev/ttyACM0` no host
+- **USB CDC ACM** funcional e estável — autologin root via `picocom /dev/ttyACM0` no host
 
 ❌ **Pendente**
-- CDC ACM travando intermitentemente (a investigar — conflito getty / autosuspend)
 - Teclado virtual / stack gráfica (Weston/Phosh/Sxmo) — pra usar o touch pra digitar
 - Wi-Fi (driver QCA + firmware)
 - Display "de verdade" (painel Tianma NT35596 — hoje só `simple-framebuffer`)

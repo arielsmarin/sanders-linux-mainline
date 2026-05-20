@@ -70,20 +70,13 @@ else
 fi
 
 ##
-## Aguarda ttyGS0 e expoe shell via cabo USB.
+## Aguarda ttyGS0 aparecer (apenas confirmacao; nao spawna shell aqui:
+## o shell vira do serial-getty@ttyGS0 do systemd apos switch_root.
+## Se nao houver rootfs, no fallback proof-of-life abrimos shell manual.
 ##
 echo "[init] aguardando /dev/ttyGS0..."
-for i in 1 2 3 4 5 6 7 8 9 10; do
-    if [ -c /dev/ttyGS0 ]; then
-        echo "[init] /dev/ttyGS0 disponivel. Abrindo shell em background."
-        /bin/setsid /bin/sh -c '
-            while true; do
-                /bin/sh < /dev/ttyGS0 > /dev/ttyGS0 2>&1
-                sleep 1
-            done
-        ' &
-        break
-    fi
+for i in 1 2 3 4 5; do
+    [ -c /dev/ttyGS0 ] && { echo "[init] /dev/ttyGS0 ok"; break; }
     /bin/sleep 1
 done
 
@@ -145,4 +138,13 @@ fi
 echo "[init] *** modo proof-of-life: sem rootfs, mas /dev/ttyACM0 disponivel ***"
 echo "[init] partlabel: $(ls /dev/disk/by-partlabel 2>/dev/null)"
 echo "[init] mmcblk:    $(ls /dev/mmcblk* 2>/dev/null)"
+# Sem rootfs: ai sim expoe shell no ttyGS0 (nao havera systemd pra fazer isso)
+if [ -c /dev/ttyGS0 ]; then
+    /bin/setsid /bin/sh -c '
+        while true; do
+            /bin/sh < /dev/ttyGS0 > /dev/ttyGS0 2>&1
+            /bin/sleep 1
+        done
+    ' &
+fi
 exec /bin/sh

@@ -32,6 +32,7 @@ readlink
 reboot
 rm
 sed
+setsid
 sh
 sleep
 stat

@@ -11,7 +11,7 @@
 | ext4 rootfs | ✅ | Montado via `blkid -L rootfs` (sem udev no initramfs) |
 | systemd / userspace Arch ARM | ✅ | Boot até shell root (autologin no tty1 via drop-in `getty@tty1.service.d/autologin.conf`) |
 | Framebuffer console | ✅ | `simple-framebuffer` do bootloader; rotated portrait |
-| USB CDC ACM (console serial via cabo USB) | ✅ | Funciona com login interativo via picocom/screen no host. Intermitente (travamentos a investigar) |
+| USB CDC ACM (console serial via cabo USB) | ✅ | Autologin root via `serial-getty@ttyGS0` do systemd. Estável após drop-in com `TTYReset/Hangup/VTDisallocate=no` + udev no-autosuspend. |
 | Touchscreen Focaltech FT5436 | ✅ | Reportando eventos ABS/KEY/SYN limpos. Probe via patch (driver mainline `edt-ft5x06` precisa skip-identify). |
 | Wi-Fi (QCA) | ❌ | Sem firmware, sem driver builtin |
 | Bluetooth | ❌ | — |
@@ -50,13 +50,21 @@ configura CDC ACM via configfs, e o host vê `/dev/ttyACM0`. Login Arch via
 `picocom -b 115200 /dev/ttyACM0` (precisa apertar Enter algumas vezes pra
 acordar o getty).
 
-**Pendente:** travamentos intermitentes na sessão CDC ACM — possíveis
-causas a investigar:
-- Conflito entre o shell que o initramfs spawnou no ttyGS0 e o
-  `serial-getty@ttyGS0` do systemd no Arch.
-- USB suspend/autosuspend.
-- `setsid not found` no initramfs (faltou symlink busybox) faz o shell
-  do initramfs morrer mas pode deixar a porta em estado ruim.
+**Estabilidade:** resolvida em 2026-05-19 com três mudanças combinadas:
+
+1. **Initramfs não spawna mais shell em `/dev/ttyGS0`** quando vai dar
+   switch_root — o shell ficava órfão depois do `exec switch_root` e
+   brigava com o `serial-getty@ttyGS0` do systemd pelo tty.
+2. **`serial-getty@ttyGS0.service` habilitado no rootfs** com drop-in:
+   - `--autologin root --keep-baud 115200,57600,38400,9600`
+   - `TTYReset=no`, `TTYVHangup=no`, `TTYVTDisallocate=no` (CDC ACM não
+     tem flow control de hardware; reset/hangup do getty deixava a
+     sessão num estado ruim).
+3. **Udev rule desligando USB autosuspend** (`power/control=on`) no
+   gadget — sem isso o controller suspendia com a sessão ACM ativa.
+
+Bônus: `setsid` adicionado aos symlinks busybox do initramfs (o init
+chamava `/bin/setsid` mas não existia).
 
 ### Touchscreen Focaltech FT5436 — ✅ FUNCIONANDO
 

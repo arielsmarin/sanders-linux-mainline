@@ -48,6 +48,32 @@ ExecStart=
 ExecStart=-/sbin/agetty --autologin root --noclear %I 38400 linux
 EOF
 
+# Habilita serial-getty@ttyGS0 com autologin root. Sem isso, o systemd nao
+# spawna getty no CDC ACM (so spawna em ttyS*/ttyMSM* por padrao) e o tty
+# fica brigado entre o shell do initramfs e nada — daí trava.
+msg "instalando serial-getty@ttyGS0 com autologin root..."
+mkdir -p "$MNT/etc/systemd/system/serial-getty@ttyGS0.service.d"
+cat > "$MNT/etc/systemd/system/serial-getty@ttyGS0.service.d/autologin.conf" <<'EOF'
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin root --keep-baud 115200,57600,38400,9600 %I $TERM
+# CDC ACM nao tem flow control de hardware — desliga pra evitar travas
+TTYReset=no
+TTYVHangup=no
+TTYVTDisallocate=no
+EOF
+mkdir -p "$MNT/etc/systemd/system/getty.target.wants"
+ln -sf /usr/lib/systemd/system/serial-getty@.service \
+    "$MNT/etc/systemd/system/getty.target.wants/serial-getty@ttyGS0.service"
+
+# Desliga USB autosuspend para o gadget (evita o controller suspender com a
+# sessao ACM ativa, o que aparece como "trava" no host).
+msg "desligando USB autosuspend via udev rule..."
+mkdir -p "$MNT/etc/udev/rules.d"
+cat > "$MNT/etc/udev/rules.d/50-usb-gadget-noautosuspend.rules" <<'EOF'
+ACTION=="add", SUBSYSTEM=="usb", TEST=="power/control", ATTR{power/control}="on"
+EOF
+
 sync
 umount "$MNT"
 rmdir "$MNT"
