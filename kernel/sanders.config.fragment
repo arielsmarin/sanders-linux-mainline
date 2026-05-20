@@ -31,6 +31,11 @@ CONFIG_USB_DWC3_QCOM=y
 CONFIG_USB_DWC3_DUAL_ROLE=y
 CONFIG_USB_DWC3_GADGET=y
 
+# PHY USB 2.0 do msm8953 (qusb2). Defconfig deixa como modulo (=m), mas
+# como nao temos modprobe no initramfs, ele nunca carrega -> dwc3 fica
+# deferred com "supplier 79000.phy not ready". Forcar builtin.
+CONFIG_PHY_QCOM_QUSB2=y
+
 # Touchscreen Focaltech FT5436 (descoberto via DTB stock Android: i2c@78b7000
 # addr 0x38, VDD=pm8953_l10, VCC_I2C=pm8953_l5). Driver mainline edt-ft5x06
 # suporta variante ft5426 que e compativel com ft5436. Builtin para ter input

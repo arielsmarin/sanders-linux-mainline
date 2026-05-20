@@ -11,7 +11,7 @@
 | ext4 rootfs | ✅ | Montado via `blkid -L rootfs` (sem udev no initramfs) |
 | systemd / userspace Arch ARM | ✅ | Boot até shell root (autologin no tty1 via drop-in `getty@tty1.service.d/autologin.conf`) |
 | Framebuffer console | ✅ | `simple-framebuffer` do bootloader; rotated portrait |
-| USB CDC ACM (console serial via cabo USB) | ❌ | `dwc3: failed to initialize core` |
+| USB CDC ACM (console serial via cabo USB) | ✅ | Funciona com login interativo via picocom/screen no host. Intermitente (travamentos a investigar) |
 | Touchscreen Focaltech FT5436 | ✅ | Reportando eventos ABS/KEY/SYN limpos. Probe via patch (driver mainline `edt-ft5x06` precisa skip-identify). |
 | Wi-Fi (QCA) | ❌ | Sem firmware, sem driver builtin |
 | Bluetooth | ❌ | — |
@@ -24,36 +24,39 @@
 
 ## Detalhes do que **não** funciona ainda
 
-### USB DWC3 (alta prioridade)
+### USB DWC3 / CDC ACM — ✅ FUNCIONANDO
 
-Mensagem do kernel:
+**Resolvido em 2026-05-19.**
+
+Sintoma original: `dwc3: failed to initialize core` + `platform 7000000.usb:
+deferred probe pending`.
+
+Causa raíz descoberta via debug no initramfs (cat
+`/sys/kernel/debug/devices_deferred`):
+
 ```
-platform 7000000.usb: deferred probe pending: dwc3: failed to initialize core
-gcc-msm8953 1000000.clock-controller: sync_state() pending due to 79000.phy
-gcc-msm8953 1000000.clock-controller: sync_state() pending due to e3000.rng
+7000000.usb     platform: supplier 79000.phy not ready
 ```
 
-**Impacto:** sem CDC ACM, não conseguimos console interativo via cabo USB.
-Touchscreen agora funciona (ver abaixo) e autologin já entrega shell root no
-framebuffer, mas digitar no console ainda precisaria de teclado virtual ou
-USB-OTG.
+O `dwc3` não estava falhando — estava **deferred** esperando o supplier
+`79000.phy` (o USB 2.0 PHY do msm8953). O PHY nunca probava porque
+`CONFIG_PHY_QCOM_QUSB2=m` (módulo no defconfig), e nosso initramfs minimal
+não tem `modprobe`. Sem o driver carregado, o nó do DTS ficava órfão.
 
-**Hipóteses:**
-- Clock ou regulator do `hsusb_phy` (PHY USB 2.0) não está sendo
-  habilitado corretamente. O DTS atual replica o do `potter.dts` —
-  precisa investigar se há diferença real entre `sanders` e `potter`
-  no clocking de USB.
-- Driver `dwc3-qcom` mainline pode estar exigindo propriedades que
-  estão presentes na DTSI do msm8953 (verificado em `msm8953.dtsi`
-  upstream), mas pode haver patches específicos do potter/sanders
-  ainda upstream do mainline.
+**Fix:** `CONFIG_PHY_QCOM_QUSB2=y` no `kernel/sanders.config.fragment`.
 
-**Próximos passos:**
-1. Comparar com `linux-postmarketos-qcom-msm8953` (se existir em pmaports).
-2. Investigar mensagens completas via `pstore`/`ramoops` — o DTS já
-   reserva `ramoops@ef000000`. Após panic/reboot, ler o log gravado.
-3. Tentar `dr_mode = "otg"` em vez de `"peripheral"`.
-4. Habilitar `CONFIG_USB_DWC3_VERBOSE=y` e ler dmesg completo.
+Resultado: após boot, `/sys/class/udc/7000000.usb` aparece, o initramfs
+configura CDC ACM via configfs, e o host vê `/dev/ttyACM0`. Login Arch via
+`picocom -b 115200 /dev/ttyACM0` (precisa apertar Enter algumas vezes pra
+acordar o getty).
+
+**Pendente:** travamentos intermitentes na sessão CDC ACM — possíveis
+causas a investigar:
+- Conflito entre o shell que o initramfs spawnou no ttyGS0 e o
+  `serial-getty@ttyGS0` do systemd no Arch.
+- USB suspend/autosuspend.
+- `setsid not found` no initramfs (faltou symlink busybox) faz o shell
+  do initramfs morrer mas pode deixar a porta em estado ruim.
 
 ### Touchscreen Focaltech FT5436 — ✅ FUNCIONANDO
 

@@ -103,15 +103,33 @@ funciona.
 Garanta que `cut`, `tr`, `xargs`, `sed`, `wc`, `basename` etc. estão
 linkados.
 
-## 7. USB DWC3 falha em probe
+## 7. USB DWC3 fica "deferred probe pending: failed to initialize core"
 
 **Sintoma:**
 ```
 platform 7000000.usb: deferred probe pending: dwc3: failed to initialize core
+gcc-msm8953 ...: sync_state() pending due to 79000.phy
 ```
 
-**Status:** sem solução ainda. Ver `HARDWARE_STATUS.md`. Esta é a
-maior pendência para ter sistema interativo via cabo USB.
+A mensagem "failed to initialize core" sugere bug no driver, mas é
+enganosa — na verdade o dwc3 está deferred esperando o supplier.
+
+**Diagnóstico:** ler `/sys/kernel/debug/devices_deferred` revela:
+```
+7000000.usb     platform: supplier 79000.phy not ready
+```
+
+**Causa:** `CONFIG_PHY_QCOM_QUSB2=m` (modular) no defconfig. Initramfs
+minimal não tem `modprobe`, então o PHY USB nunca probava → dwc3 ficava
+deferred infinito.
+
+**Solução:** `CONFIG_PHY_QCOM_QUSB2=y` no config fragment. Já aplicado
+em `kernel/sanders.config.fragment`.
+
+**Lição:** quando ver "deferred probe pending: ... failed to initialize",
+o diagnóstico mais valioso é `cat /sys/kernel/debug/devices_deferred`
+no userspace (ou no initramfs após `mount -t debugfs none /sys/kernel/debug`).
+Mostra exatamente qual supplier está faltando.
 
 ## 8. fastboot precisa de senha sudo
 

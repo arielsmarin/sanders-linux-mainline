@@ -7,12 +7,12 @@ o kernel Linux mainline upstream. Não há porte oficial em
 [postmarketOS](https://postmarketos.org/),
 [Mobian](https://mobian-project.org/) ou outras distros para mobile.
 
-> ⚠️ **Estado: proof-of-life + touchscreen + autologin root.** O sistema
-> boota direto num shell root no framebuffer (autologin no `tty1`), e o
-> **touchscreen Focaltech FT5436 reporta eventos limpos** (ABS multi-touch
-> + BTN_TOUCH) em `/dev/input/event1`. Ainda faltam: USB CDC ACM (DWC3
-> falha), Wi-Fi, áudio, painel real, teclado virtual (necessário pra
-> digitar). Veja [`docs/HARDWARE_STATUS.md`](docs/HARDWARE_STATUS.md).
+> ✅ **Estado: sistema interativo via cabo USB.** Boot completo do kernel
+> mainline → Arch Linux ARM → autologin root no framebuffer + **shell via
+> CDC ACM no host** (`/dev/ttyACM0`). Touchscreen Focaltech FT5436
+> reportando eventos limpos em `/dev/input/event1`. Pendências: travamentos
+> intermitentes do CDC ACM (a investigar), Wi-Fi, áudio, painel real.
+> Veja [`docs/HARDWARE_STATUS.md`](docs/HARDWARE_STATUS.md).
 
 | | |
 |---|---|
@@ -126,9 +126,10 @@ Build artifacts vão para `build/` e `build/out/` (gitignored).
 - Boot do systemd
 - getty no tty1 com **autologin root** (shell root pronto no framebuffer)
 - Touchscreen Focaltech FT5436 reportando eventos em `/dev/input/event1`
+- **USB CDC ACM** funcional — login interativo via `picocom /dev/ttyACM0` no host
 
 ❌ **Pendente**
-- USB CDC ACM (`dwc3: failed to initialize core` — bug provável no DTS/clocks)
+- CDC ACM travando intermitentemente (a investigar — conflito getty / autosuspend)
 - Teclado virtual / stack gráfica (Weston/Phosh/Sxmo) — pra usar o touch pra digitar
 - Wi-Fi (driver QCA + firmware)
 - Display "de verdade" (painel Tianma NT35596 — hoje só `simple-framebuffer`)
