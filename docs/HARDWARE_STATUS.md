@@ -14,7 +14,7 @@
 | USB CDC ACM (console serial via cabo USB) | ✅ | Autologin root via `serial-getty@ttyGS0` do systemd. Estável após drop-in com `TTYReset/Hangup/VTDisallocate=no` + udev no-autosuspend. |
 | USB CDC ECM (rede sobre cabo USB) | ✅ | `usb0` no phone @ 10.42.0.2/24, host @ 10.42.0.1/24, SSH `root@10.42.0.2` OK. NAT no host via `scripts/08-host-net.sh`. **Ordem das functions no initramfs importa**: ECM tem que ser registrada *antes* da ACM (kernel 7.1.0-rc4 faz TX stuck do ECM se ACM vier primeiro — qdisc enche e tx_packets fica em 0). Veja TROUBLESHOOTING #13. |
 | Touchscreen Focaltech FT5436 | ✅ | Reportando eventos ABS/KEY/SYN limpos. Probe via patch (driver mainline `edt-ft5x06` precisa skip-identify). |
-| Wi-Fi (QCA WCN3680B / pronto) | ⚠️ | Hardware OK (scan funciona). Auth+assoc completam. 4-way handshake WPA2 falha com `hal_config_bss MEM_FAIL=5` (limitacao conhecida wcn36xx em msm8953). Veja secao "Wi-Fi WCN3680B" abaixo. |
+| Wi-Fi (QCA WCN3680B / pronto) | ⚠️ | Hardware OK (scan funciona). Auth+assoc completam. 4-way handshake WPA2 falha com `hal_config_bss MEM_FAIL=5`. Investigado a fundo em 2026-05-20 — **bloqueio upstream**, sem solução pratica nesta sessao. Veja secao "Wi-Fi WCN3680B" abaixo. |
 | Bluetooth | ❌ | — |
 | Display "de verdade" (painel Tianma NT35596 ou DJN ILI7807D) | ❌ | Driver mainline inexistente. `simple-framebuffer` do bootloader exposto como `/dev/dri/card0` via `DRM_SIMPLEDRM` — suficiente pra Weston/Wayland rodar em SW renderer (pixman), sem aceleração. |
 | Wayland (Weston) | ✅ | Compositor DRM rodando sobre SimpleDRM, output 1080×1920@60 `transform=rotate-270`, touch FT5436 + gpio-keys funcionais. Renderer pixman (CPU). Disponível no flavor `desktop` mas **não habilitado** por default (Phosh é o default). Adreno 506 ocioso até termos driver de painel real + freedreno. |
@@ -157,6 +157,52 @@ driver mainline `wcn36xx` via `qcom-wcnss-pil` (Peripheral Image Loader).
     pode estar relacionado.
 - Proximos passos: tentar firmware do LineageOS 18.1+/pmOS, ou patches do
   pmOS-linux-msm8953 (`linux-postmarketos-qcom-msm8953`).
+
+**Investigacao 2026-05-20 (sessao de tentativa de fix — sem sucesso):**
+
+Tres hipoteses validadas e descartadas:
+
+1. **wlan_nv.bin alternativo**: comparado md5 dos 4 forks LineageOS/dotOS
+   do sanders (alissonlauffer/ten, dotOS-Devices/dot11, Motorola-Common,
+   effeffe/halium-10). **Todos identicos** (md5 7784365e9db784737ed3eb...).
+   Variantes regionais (`*_Brazil.bin`, `*_India.bin`) sao placebos —
+   mesmo blob. Nao e cal corrupto.
+
+2. **Supply `vddmx`**: warning `supply vddmx not found, using dummy
+   regulator` no boot e **cosmetico**. O driver `qcom_wcnss.c` usa
+   `pronto_v3_data` (compatible `qcom,pronto-v3-pil`), que tira `mx`/`cx`
+   de `power-domains = <&rpmpd MSM8953_VDDCX/VDDMX>` (ja presente em
+   `msm8953.dtsi`). O warning vem do regulator-core olhando pelo nome,
+   nao impede o funcionamento.
+
+3. **Patches pmOS no wcn36xx**: comparado byte-a-byte
+   `drivers/net/wireless/ath/wcn36xx/{main,smd,hal,dxe,wcn36xx,smd}.c/.h`
+   entre `github.com/msm8953-mainline/linux@7.0.2/main` e nosso build
+   mainline (master perto de 7.1.0-rc4). **Um unico diff** em `smd.c`
+   (`len < sizeof(*rsp)` vs `!=`) que e cosmetico no warning "Bad TX
+   complete indication". **Nenhum patch resolve o MEM_FAIL=5.**
+
+**Conclusao**: `MEM_FAIL=5` em `hal_config_bss` e firmware-side. O Pronto
+FW do stock Motorola 7.1.1 nao aloca contexto BSS quando o mainline
+wcn36xx pede certas combinacoes de capabilities. PostmarketOS para
+msm8953 sofre o mesmo problema — eles rodam o mesmo codigo mainline e
+documentam isso em issues.
+
+**MAC `02:xx:xx:xx:xx:xx`** gerado no boot e mainline `wcn36xx` nao
+saber parsear o formato do `WCNSS_qcom_wlan_nv.bin` que temos (formato
+da Pronto FW stock). Cosmetico — nao e cal corrupto, e driver sem codigo
+pra ler.
+
+**Saidas reais (todas custosas, fora do escopo)**:
+- Engenharia reversa do Pronto FW pra inferir o que `hal_config_bss`
+  precisa que mandamos errado.
+- Portar driver vendor `qcacld` (proprietary, downstream, **nao
+  funciona em mainline**).
+- Esperar fix upstream — tem patches em revisao na lista wcn36xx
+  (devs do msm8916), nao mergeados.
+
+**Workaround atual**: cabo USB CDC ECM da acesso a internet, suficiente
+pro proposito atual do dispositivo.
 
 ### Painel de display
 
