@@ -34,6 +34,38 @@ msg "extraindo Arch Linux ARM tarball..."
 mount -o loop "$ROOTFS_IMG" "$MNT"
 bsdtar -xpf "$ARCH_TARBALL" -C "$MNT"
 
+# Inicializa pacman keyring no rootfs (via arch-chroot + qemu-user binfmt).
+# Sem isso, no primeiro boot o pacman da:
+#   "Public keyring not found; have you run 'pacman-key --init'?"
+# e nao consegue instalar pacote nenhum. Faz aqui pra deixar tudo pronto.
+if command -v arch-chroot >/dev/null && [ -f /proc/sys/fs/binfmt_misc/qemu-aarch64 ]; then
+    msg "inicializando pacman keyring (via arch-chroot + qemu-aarch64)..."
+    arch-chroot "$MNT" pacman-key --init >/dev/null 2>&1 || warn "pacman-key --init falhou"
+    arch-chroot "$MNT" pacman-key --populate archlinuxarm >/dev/null 2>&1 \
+        || warn "pacman-key --populate archlinuxarm falhou"
+else
+    warn "arch-chroot/qemu-aarch64 binfmt nao disponivel; keyring sera inicializado no primeiro boot do device"
+    # Fallback: cria oneshot service que inicializa o keyring no primeiro boot
+    cat > "$MNT/etc/systemd/system/pacman-keyring-init.service" <<'EOF'
+[Unit]
+Description=Inicializa pacman keyring (apenas uma vez)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=!/etc/pacman.d/gnupg/pubring.gpg
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/pacman-key --init
+ExecStart=/usr/bin/pacman-key --populate archlinuxarm
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    ln -sf /etc/systemd/system/pacman-keyring-init.service \
+        "$MNT/etc/systemd/system/multi-user.target.wants/pacman-keyring-init.service"
+fi
+
 # Permite login root via console serial
 echo "ttyMSM0" >> "$MNT/etc/securetty" 2>/dev/null || true
 echo "ttyGS0"  >> "$MNT/etc/securetty" 2>/dev/null || true
