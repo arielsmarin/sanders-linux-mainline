@@ -133,9 +133,10 @@ Build artifacts vão para `build/` e `build/out/` (gitignored).
 - **USB CDC ACM** funcional — autologin root via `picocom /dev/ttyACM0` no host
 - **Rede USB CDC ECM** + NAT no host — phone navega a internet pelo cabo USB (`scripts/08-host-net.sh` configura o lado do PC)
 - **sshd** habilitado no rootfs (root/root) — escutando em 10.42.0.2
-- **Dois flavors de rootfs** selecionáveis via `FLAVOR=` no `05-build-rootfs.sh`: `headless` (default, ~3 GiB, server-style — SSH/SAMBA) e `desktop` (~5 GiB, Weston + Xwayland + mesa pré-instalados).
-- **Wayland (Weston)** rodando sobre SimpleDRM no framebuffer do bootloader — desktop + teclado virtual + touch FT5436 funcionando. Renderer software (pixman), sem GPU. Autostart via `weston.service` substituindo o `getty@tty1` (apenas no flavor `desktop`).
-- **OpenGL via Xwayland + llvmpipe** — `glxgears` rodando ~140 FPS (Mesa 26, llvmpipe LLVM 22.1). Stack: glxgears → libGL → llvmpipe → Xwayland → Weston → DRM SimpleDRM. Apenas no flavor `desktop`.
+- **Dois flavors de rootfs** selecionáveis via `FLAVOR=` no `05-build-rootfs.sh`: `headless` (default, ~3 GiB, server-style — SSH/SAMBA) e `desktop` (~6 GiB, Phosh + Weston + Xwayland + mesa pré-instalados).
+- **Phosh + Phoc + Squeekboard** (default no flavor `desktop`) — shell mobile estilo Android com lockscreen, app drawer, painel, OSK integrado, touch funcional. Renderer pixman (CPU). Veja TROUBLESHOOTING #16 sobre a gotcha de `WLR_RENDERER=pixman` em simpledrm.
+- **Wayland (Weston)** disponível como alternativa minimalista no flavor `desktop` — autostart via `weston.service` (dorme por default, ativar com `systemctl disable phosh && systemctl enable weston`).
+- **OpenGL via Xwayland + llvmpipe** — `glxgears` rodando ~140 FPS (Mesa 26, llvmpipe LLVM 22.1). Stack: glxgears → libGL → llvmpipe → Xwayland → compositor → DRM SimpleDRM. Apenas no flavor `desktop`.
 - **Wi-Fi WCN3680B** parcial — pronto firmware carrega, `wlan0` cria, scan funciona, auth+assoc OK, mas **4-way handshake WPA2 falha** (`hal_config_bss MEM_FAIL`, limitação wcn36xx — veja [`docs/HARDWARE_STATUS.md`](docs/HARDWARE_STATUS.md))
 
 ❌ **Pendente**

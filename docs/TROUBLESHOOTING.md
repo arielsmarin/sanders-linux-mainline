@@ -218,6 +218,39 @@ desabilitar ACM. ifname do host muda de `enp0s20f0u4i2` (ACM primeiro)
 para `enp0s20f0u4` (ECM primeiro), mas isso é cosmético — o
 `scripts/08-host-net.sh` detecta pelo MAC `02:11:22:33:44:55`.
 
+## 16. Phosh (Phoc) inicia mas a tela fica preta (`Timeout 3000ms expired with 1 configures pending`)
+
+**Sintoma:** Phoc + Phosh + gnome-session + Squeekboard sobem todos (procs
+vivos), DRM faz modeset OK em `Unknown-1` 1080x1920@60, mas a tela permanece
+preta. Journal mostra `Phosh ready` seguido de
+`Timeout (3000ms) expired with 1 configures pending`.
+
+**Causa:** wlroots tenta o caminho **EGL/GBM** para apresentar frames no
+simpledrm. `simpledrm` é um driver "fake KMS" que só expõe o
+`simple-framebuffer` do bootloader — não suporta o pipeline GBM/dma-buf
+completo. Mesmo com `WLR_RENDERER_ALLOW_SOFTWARE=1` (que libera llvmpipe), o
+ciclo de buffers GBM→DRM não fecha e nada chega ao painel.
+
+**Fix:** forçar wlroots a usar o renderer **pixman** puro, que escreve
+diretamente em DRM dumb buffers (caminho que o simpledrm aceita — é o que o
+Weston também usa nesse sanders):
+
+```
+Environment=WLR_RENDERER=pixman
+```
+
+Já aplicado no `phosh.service` versionado em
+`rootfs-overlay/desktop/etc/systemd/system/phosh.service`.
+
+**Outras pegadinhas no caminho:**
+
+- `WLR_DRM_NO_ATOMIC=1` parece travar phoc antes de iniciar o gnome-session.
+  Não usar.
+- `rotate = 270` no `phoc.ini` também trava — simpledrm não tem rotação por
+  plane DRM. Deixar `transform`/`rotate` fora do `[output:Unknown-1]`.
+- `scale = 3` no `[output:Unknown-1]` funciona e é necessário (painel
+  ~400 DPI fica minúsculo em scale=1).
+
 ## 15. Rootfs cheia logo após instalar (df mostra 2.9 GiB, não 24 GiB)
 
 **Sintoma:** `df -h /` reporta 2.9 GiB total / ~100% usado depois de poucos

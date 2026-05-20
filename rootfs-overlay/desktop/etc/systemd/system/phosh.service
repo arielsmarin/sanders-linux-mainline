@@ -1,0 +1,29 @@
+[Unit]
+Description=Phosh phone shell on Phoc compositor
+After=systemd-user-sessions.service
+Conflicts=getty@tty1.service weston.service
+
+[Service]
+User=root
+PAMName=login
+Environment=XDG_RUNTIME_DIR=/run/user/0
+Environment=XDG_SESSION_TYPE=wayland
+Environment=XDG_CURRENT_DESKTOP=Phosh:GNOME
+Environment=WLR_RENDERER_ALLOW_SOFTWARE=1
+# CRITICO no sanders: simpledrm nao suporta o caminho EGL/GBM completo do
+# wlroots — phoc inicializa mas a tela fica preta. Pixman puro escreve
+# direto em DRM dumb buffers, que e o que o simple-framebuffer aceita.
+# Veja docs/TROUBLESHOOTING.md #16.
+Environment=WLR_RENDERER=pixman
+ExecStartPre=/bin/mkdir -p /run/user/0
+ExecStartPre=/bin/chmod 700 /run/user/0
+ExecStart=/usr/bin/phosh-session
+Restart=on-failure
+RestartSec=3
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -17,7 +17,8 @@
 | Wi-Fi (QCA WCN3680B / pronto) | ⚠️ | Hardware OK (scan funciona). Auth+assoc completam. 4-way handshake WPA2 falha com `hal_config_bss MEM_FAIL=5` (limitacao conhecida wcn36xx em msm8953). Veja secao "Wi-Fi WCN3680B" abaixo. |
 | Bluetooth | ❌ | — |
 | Display "de verdade" (painel Tianma NT35596 ou DJN ILI7807D) | ❌ | Driver mainline inexistente. `simple-framebuffer` do bootloader exposto como `/dev/dri/card0` via `DRM_SIMPLEDRM` — suficiente pra Weston/Wayland rodar em SW renderer (pixman), sem aceleração. |
-| Wayland (Weston) | ✅ | Compositor DRM rodando sobre SimpleDRM, output 1080×1920@60 `transform=rotate-270`, touch FT5436 + gpio-keys funcionais. Renderer pixman (CPU). Autostart via `weston.service` (apenas no flavor `desktop`). Adreno 506 ocioso até termos driver de painel real + freedreno. |
+| Wayland (Weston) | ✅ | Compositor DRM rodando sobre SimpleDRM, output 1080×1920@60 `transform=rotate-270`, touch FT5436 + gpio-keys funcionais. Renderer pixman (CPU). Disponível no flavor `desktop` mas **não habilitado** por default (Phosh é o default). Adreno 506 ocioso até termos driver de painel real + freedreno. |
+| Phosh + Phoc + Squeekboard | ✅ | Shell mobile estilo Android (lockscreen, app drawer, painel). Compositor Phoc (wlroots) com `WLR_RENDERER=pixman` (EGL/GBM em simpledrm não fecha o ciclo de buffers — veja TROUBLESHOOTING #16). Squeekboard como OSK integrado, aparece em qualquer cliente Wayland que ative `text-input-v3` ou `virtual-keyboard-v1`. `scale=3` no `phoc.ini` (painel ~400 DPI). Default no flavor `desktop`. |
 | OpenGL via Xwayland | ✅ | `glxgears` ~140 FPS via Mesa 26 / llvmpipe (LLVM 22.1, software rasterizer 128-bit) sobre Xwayland sobre Weston. `glxinfo`: OpenGL 4.5 Core, GLES 3.2, direct rendering yes. Habilitado no `weston.ini` (`xwayland=true`). Apenas no flavor `desktop`. |
 | Áudio | ❌ | — |
 | Modem (telefonia/dados) | ❌ | — |
@@ -175,8 +176,8 @@ Kernel, DTS, initramfs e lk2nd são idênticos — só muda o userspace.
 | | Headless | Desktop |
 |---|---|---|
 | Tamanho da imagem | 3 GiB | 5 GiB |
-| Pacotes extras | `samba` (não habilitado) | `samba` + `weston`, `xorg-xwayland`, `mesa`, `mesa-utils`, `mesa-demos`, `seatd`, `libdisplay-info`, `ttf-dejavu`, `noto-fonts` |
-| Compositor no boot | nenhum (getty@tty1 ativo) | `weston.service` substitui `getty@tty1` |
+| Pacotes extras | `samba` (não habilitado) | `samba` + `phoc`, `phosh`, `squeekboard`, `weston`, `xorg-xwayland`, `mesa`, `mesa-utils`, `mesa-demos`, `seatd`, `libdisplay-info`, `ttf-dejavu`, `noto-fonts` |
+| Compositor no boot | nenhum (getty@tty1 ativo) | `phosh.service` substitui `getty@tty1` (default). Weston disponível mas dormindo — alternar com `systemctl disable phosh && systemctl enable weston`. |
 | Caso de uso | SSH, SAMBA, server-style headless | Desktop interativo + apps gráficos |
 
 Arquivos versionados específicos do desktop ficam em

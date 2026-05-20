@@ -27,7 +27,7 @@ mkdir -p "$MNT"
 
 case "$FLAVOR" in
     headless) IMG_SIZE=3G ;;
-    desktop)  IMG_SIZE=5G ;;
+    desktop)  IMG_SIZE=6G ;;
 esac
 rm -f "$ROOTFS_IMG"
 msg "criando imagem ext4 $IMG_SIZE (FLAVOR=$FLAVOR) com LABEL=rootfs..."
@@ -64,8 +64,13 @@ if command -v arch-chroot >/dev/null && [ -f /proc/sys/fs/binfmt_misc/qemu-aarch
         || warn "pacman -S samba falhou"
     if [ "$FLAVOR" = "desktop" ]; then
         msg "instalando stack desktop (weston + xwayland + mesa) via arch-chroot..."
+        # Instala dois compositores: phosh (default, shell mobile) +
+        # weston (alternativa minimalista). Decisao de qual usar e via
+        # systemctl enable/disable. Default no overlay e phosh.
         arch-chroot "$MNT" pacman -Sy --noconfirm --needed \
-            weston seatd libdisplay-info \
+            phoc phosh squeekboard \
+            weston \
+            seatd libdisplay-info \
             xorg-xwayland mesa mesa-utils mesa-demos \
             ttf-dejavu noto-fonts \
             || die "pacman -S do stack desktop falhou"
