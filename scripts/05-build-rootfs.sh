@@ -246,13 +246,15 @@ mkdir -p "$MNT/etc/systemd/system/timers.target.wants"
 ln -sf /etc/systemd/system/usb-keepalive.timer \
     "$MNT/etc/systemd/system/timers.target.wants/usb-keepalive.timer"
 
-# Overlay especifico do flavor (weston.ini, weston.service, etc).
+# Overlays: common/ aplica nos dois flavors; $FLAVOR/ aplica so no escolhido.
 # cp -a preserva symlinks (incluindo os de multi-user.target.wants).
-OVERLAY="$REPO/rootfs-overlay/$FLAVOR"
-if [ -d "$OVERLAY" ]; then
-    msg "aplicando overlay $FLAVOR ($OVERLAY)..."
-    cp -a "$OVERLAY"/. "$MNT"/
-fi
+for ov in common "$FLAVOR"; do
+    OVERLAY="$REPO/rootfs-overlay/$ov"
+    if [ -d "$OVERLAY" ]; then
+        msg "aplicando overlay $ov ($OVERLAY)..."
+        cp -a "$OVERLAY"/. "$MNT"/
+    fi
+done
 
 # Desktop: weston.service substitui getty@tty1. Remove o drop-in de
 # autologin pra evitar conflito (weston.service tem Conflicts=getty@tty1).
