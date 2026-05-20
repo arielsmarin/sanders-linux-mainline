@@ -175,7 +175,7 @@ Kernel, DTS, initramfs e lk2nd são idênticos — só muda o userspace.
 | | Headless | Desktop |
 |---|---|---|
 | Tamanho da imagem | 3 GiB | 5 GiB |
-| Pacotes extras | `samba` (não habilitado) | `samba` + `weston`, `xorg-xwayland`, `mesa`, `mesa-utils`, `mesa-demos`, `seatd`, `libdisplay-info` |
+| Pacotes extras | `samba` (não habilitado) | `samba` + `weston`, `xorg-xwayland`, `mesa`, `mesa-utils`, `mesa-demos`, `seatd`, `libdisplay-info`, `ttf-dejavu`, `noto-fonts` |
 | Compositor no boot | nenhum (getty@tty1 ativo) | `weston.service` substitui `getty@tty1` |
 | Caso de uso | SSH, SAMBA, server-style headless | Desktop interativo + apps gráficos |
 
