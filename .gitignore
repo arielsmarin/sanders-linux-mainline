@@ -29,3 +29,9 @@ busybox
 
 # Logs
 *.log
+
+# Firmware proprietario (pronto Wi-Fi + WCNSS NV cal). Blobs do
+# Motorola/Qualcomm e LineageOS sanders proprietary. Cada user extrai
+# por conta (scripts/09-extract-firmware.sh).
+firmware/
+firmware-sanders-orig/

@@ -50,3 +50,52 @@ CONFIG_PHY_QCOM_QUSB2=y
 CONFIG_INPUT_EVDEV=y
 CONFIG_INPUT_TOUCHSCREEN=y
 CONFIG_TOUCHSCREEN_EDT_FT5X06=y
+
+# Landlock LSM (sandbox) — pacman usa em userspace pra isolar downloads.
+# Sem isso, pacman -Sy falha com "Landlock is not supported by kernel".
+CONFIG_SECURITY_LANDLOCK=y
+
+# Wi-Fi (WCN3680B "pronto" + wcn36xx driver). Tudo builtin pra evitar
+# probleminhas com firmware/module loading no boot. Firmware do pronto
+# precisa estar em /lib/firmware/wlan/prima/ no rootfs (extraido do
+# /vendor do stock e do /vendor/firmware/wlan/prima/WCNSS_cfg.dat do
+# device — escrito de fabrica).
+#
+# Atencao: a cascata abaixo precisa ser TODA builtin senao o merge
+# acaba forcando o leaf (wcn36xx) pra modulo. Em particular:
+#   - RFKILL=y  (CFG80211 depende dele; se =m, CFG80211 vira =m)
+#   - QCOM_PIL_INFO=y  (WCNSS_PIL depende; se =m, WCNSS_PIL vira =m)
+CONFIG_RFKILL=y
+CONFIG_RFKILL_INPUT=y
+CONFIG_CFG80211=y
+CONFIG_MAC80211=y
+CONFIG_WLAN=y
+CONFIG_WLAN_VENDOR_ATH=y
+CONFIG_ATH_COMMON=y
+CONFIG_WCN36XX=y
+# Pronto remoteproc (PIL = Peripheral Image Loader)
+CONFIG_REMOTEPROC=y
+CONFIG_QCOM_PIL_INFO=y
+CONFIG_QCOM_WCNSS_PIL=y
+CONFIG_QCOM_WCNSS_CTRL=y
+# IPC: smd (control channel) + smp2p (sinais inter-processador)
+CONFIG_RPMSG_QCOM_SMD=y
+CONFIG_QCOM_SMP2P=y
+CONFIG_QCOM_SMEM=y
+CONFIG_QCOM_SMEM_STATE=y
+# SMD-backed RPMSG character device — necessario pra wcnss_ctrl falar
+# com o pronto via canal SMD WCNSS_CTRL
+CONFIG_RPMSG=y
+# QCOM_WCNSS_PIL tem "depends on FOO || FOO=n" pra varios componentes;
+# se algum deles for =m, o PIL e capado para =m tambem. Por isso forcamos
+# toda a cadeia builtin abaixo, senao a iface nao auto-sobe no boot
+# (sem modprobe no initramfs).
+CONFIG_QCOM_SYSMON=y
+CONFIG_RPMSG_QCOM_GLINK=y
+CONFIG_RPMSG_QCOM_GLINK_SMEM=y
+CONFIG_QCOM_QMI_HELPERS=y
+# QRTR: socket family AF_QIPCRTR usado pelo qmi handle do wcnss_pil.
+# Sem isso, init falha com "failed to initialize qmi handle" e a iface
+# nao sobe.
+CONFIG_QRTR=y
+CONFIG_QRTR_SMD=y

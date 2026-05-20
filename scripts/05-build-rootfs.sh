@@ -117,6 +117,25 @@ EOF
 ln -sf /usr/lib/systemd/system/sshd.service \
     "$MNT/etc/systemd/system/multi-user.target.wants/sshd.service"
 
+# Firmware proprietario (Wi-Fi pronto + iris cal). Sem isso o
+# remoteproc do wcnss falha em carregar e o wcn36xx nao traz iface up.
+# Use scripts/09-extract-firmware.sh pra extrair do flashfile stock.
+if [ -d "$REPO/firmware" ] && ls "$REPO/firmware"/wcnss.* >/dev/null 2>&1; then
+    msg "instalando firmware Wi-Fi (wcnss) no rootfs..."
+    mkdir -p "$MNT/lib/firmware/wlan/prima"
+    cp -v "$REPO/firmware"/wcnss.* "$MNT/lib/firmware/" | tail -3
+    if [ -f "$REPO/firmware/wlan/prima/WCNSS_qcom_wlan_nv.bin" ]; then
+        cp "$REPO/firmware/wlan/prima/WCNSS_qcom_wlan_nv.bin" \
+            "$MNT/lib/firmware/wlan/prima/"
+    else
+        warn "WCNSS_qcom_wlan_nv.bin ausente — Wi-Fi nao vai funcionar"
+        warn "Extrai-lo de /persist do device. Veja docs/."
+    fi
+else
+    warn "diretorio firmware/ vazio — Wi-Fi nao funcionara"
+    warn "Rode scripts/09-extract-firmware.sh para populá-lo"
+fi
+
 sync
 umount "$MNT"
 rmdir "$MNT"

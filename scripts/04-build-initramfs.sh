@@ -37,6 +37,19 @@ msg "instalando /init..."
 cp "$REPO/initramfs/init" "$INITRAMFS_ROOT/init"
 chmod +x "$INITRAMFS_ROOT/init"
 
+# Firmware embutido no initramfs. Necessario porque drivers builtin
+# (wcnss-pil etc) chamam request_firmware na init dos drivers, MUITO
+# antes do switch_root para o rootfs. Sem isso, "wcnss.mdt failed: -2".
+if [ -d "$REPO/firmware" ] && ls "$REPO/firmware"/*.* >/dev/null 2>&1; then
+    msg "incorporando firmware no initramfs..."
+    mkdir -p "$INITRAMFS_ROOT/lib/firmware/wlan/prima"
+    cp "$REPO/firmware"/wcnss.* "$INITRAMFS_ROOT/lib/firmware/" 2>/dev/null || true
+    if [ -f "$REPO/firmware/wlan/prima/WCNSS_qcom_wlan_nv.bin" ]; then
+        cp "$REPO/firmware/wlan/prima/WCNSS_qcom_wlan_nv.bin" \
+            "$INITRAMFS_ROOT/lib/firmware/wlan/prima/"
+    fi
+fi
+
 msg "compactando em $OUT/initramfs.cpio.gz..."
 (cd "$INITRAMFS_ROOT" && find . | cpio -o -H newc 2>/dev/null) | gzip -9 > "$OUT/initramfs.cpio.gz"
 msg "OK: $OUT/initramfs.cpio.gz ($(du -h "$OUT/initramfs.cpio.gz" | cut -f1))"

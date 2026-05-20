@@ -339,3 +339,32 @@
 	/delete-property/ usb-role-switch;
 	dr_mode = "peripheral";
 };
+
+/*
+ * Wi-Fi/Bluetooth (WCN3680B "pronto" + iris RF transceiver).
+ *
+ * Reguladores extraidos do DTB stock Android (qcom,wcnss-wlan):
+ *   - vddxo  -> pm8953_l7  (1.8V)
+ *   - vddrfa -> pm8953_l19 (1.2V)
+ *   - vddpa  -> pm8953_l9  (3.0V)
+ *   - vdddig -> pm8953_l5  (1.8V)
+ *   - vddpx  -> pm8953_l5  (1.8V)
+ *   - vddcx/vddmx ja vem via power-domains do msm8953.dtsi
+ *
+ * Firmware necessario em /lib/firmware/wlan/prima/ (extraido do
+ * Android stock NON-HLOS.bin).
+ */
+&wcnss {
+	vddpx-supply = <&pm8953_l5>;
+
+	status = "okay";
+};
+
+&wcnss_iris {
+	compatible = "qcom,wcn3680";
+
+	vddxo-supply = <&pm8953_l7>;
+	vddrfa-supply = <&pm8953_l19>;
+	vddpa-supply = <&pm8953_l9>;
+	vdddig-supply = <&pm8953_l5>;
+};

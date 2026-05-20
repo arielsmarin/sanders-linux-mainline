@@ -128,13 +128,14 @@ Build artifacts vão para `build/` e `build/out/` (gitignored).
 - Boot do systemd
 - getty no tty1 com **autologin root** (shell root pronto no framebuffer)
 - Touchscreen Focaltech FT5436 reportando eventos em `/dev/input/event1`
-- **USB CDC ACM** funcional e estável — autologin root via `picocom /dev/ttyACM0` no host
+- **USB CDC ACM** funcional — autologin root via `picocom /dev/ttyACM0` no host
 - **Rede USB CDC ECM** + NAT no host — phone navega a internet pelo cabo USB (`scripts/08-host-net.sh` configura o lado do PC)
 - **sshd** habilitado no rootfs (root/root) — escutando em 10.42.0.2
+- **Wi-Fi WCN3680B** parcial — pronto firmware carrega, `wlan0` cria, scan funciona, auth+assoc OK, mas **4-way handshake WPA2 falha** (`hal_config_bss MEM_FAIL`, limitação wcn36xx — veja [`docs/HARDWARE_STATUS.md`](docs/HARDWARE_STATUS.md))
 
 ❌ **Pendente**
+- Link USB CDC ECM/ACM caindo intermitentemente (a investigar)
 - Teclado virtual / stack gráfica (Weston/Phosh/Sxmo) — pra usar o touch pra digitar
-- Wi-Fi (driver QCA + firmware)
 - Display "de verdade" (painel Tianma NT35596 — hoje só `simple-framebuffer`)
 - Áudio, sensores, câmera, modem
 
