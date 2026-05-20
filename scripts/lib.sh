@@ -15,8 +15,17 @@ LK2ND_SRC="$BUILD/lk2nd-src"
 LINUX_SRC="$BUILD/linux"
 BUSYBOX_SRC="$BUILD/busybox-1.36.1"
 INITRAMFS_ROOT="$BUILD/initramfs-root"
-ROOTFS_IMG="$BUILD/rootfs-arch.img"
 ARCH_TARBALL="$BUILD/ArchLinuxARM-aarch64-latest.tar.gz"
+
+# Flavor do rootfs: "headless" (default, minimal — SSH/SAMBA/server) ou
+# "desktop" (Weston + Xwayland + mesa). Kernel/initramfs/lk2nd sao
+# identicos entre os dois; so muda o userspace no rootfs.
+FLAVOR="${FLAVOR:-headless}"
+case "$FLAVOR" in
+    headless|desktop) ;;
+    *) echo "FLAVOR invalido: $FLAVOR (use headless|desktop)" >&2; exit 1 ;;
+esac
+ROOTFS_IMG="$BUILD/rootfs-arch-$FLAVOR.img"
 
 # Versões
 BUSYBOX_VER="1.36.1"

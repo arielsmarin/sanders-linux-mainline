@@ -25,9 +25,13 @@ mountpoint -q "$MNT" && umount "$MNT" || true
 rm -rf "$MNT"
 mkdir -p "$MNT"
 
+case "$FLAVOR" in
+    headless) IMG_SIZE=3G ;;
+    desktop)  IMG_SIZE=5G ;;
+esac
 rm -f "$ROOTFS_IMG"
-msg "criando imagem ext4 3 GiB com LABEL=rootfs..."
-truncate -s 3G "$ROOTFS_IMG"
+msg "criando imagem ext4 $IMG_SIZE (FLAVOR=$FLAVOR) com LABEL=rootfs..."
+truncate -s "$IMG_SIZE" "$ROOTFS_IMG"
 mkfs.ext4 -L rootfs -F "$ROOTFS_IMG" >/dev/null
 
 msg "extraindo Arch Linux ARM tarball..."
@@ -43,8 +47,23 @@ if command -v arch-chroot >/dev/null && [ -f /proc/sys/fs/binfmt_misc/qemu-aarch
     arch-chroot "$MNT" pacman-key --init >/dev/null 2>&1 || warn "pacman-key --init falhou"
     arch-chroot "$MNT" pacman-key --populate archlinuxarm >/dev/null 2>&1 \
         || warn "pacman-key --populate archlinuxarm falhou"
+    # Samba: util pros dois flavors (compartilhar /home via Wi-Fi/USB).
+    # Nao habilita servico — usuario decide com `systemctl enable smb nmb`.
+    msg "instalando samba (sem habilitar smb/nmb)..."
+    arch-chroot "$MNT" pacman -Sy --noconfirm --needed samba \
+        || warn "pacman -S samba falhou"
+    if [ "$FLAVOR" = "desktop" ]; then
+        msg "instalando stack desktop (weston + xwayland + mesa) via arch-chroot..."
+        arch-chroot "$MNT" pacman -Sy --noconfirm --needed \
+            weston seatd libdisplay-info \
+            xorg-xwayland mesa mesa-utils mesa-demos \
+            || die "pacman -S do stack desktop falhou"
+        arch-chroot "$MNT" systemctl enable seatd.service >/dev/null
+    fi
 else
     warn "arch-chroot/qemu-aarch64 binfmt nao disponivel; keyring sera inicializado no primeiro boot do device"
+    [ "$FLAVOR" = "desktop" ] && \
+        die "FLAVOR=desktop requer arch-chroot + qemu-aarch64 binfmt no host (instale qemu-user-static-binfmt)"
     # Fallback: cria oneshot service que inicializa o keyring no primeiro boot
     cat > "$MNT/etc/systemd/system/pacman-keyring-init.service" <<'EOF'
 [Unit]
@@ -65,6 +84,33 @@ EOF
     ln -sf /etc/systemd/system/pacman-keyring-init.service \
         "$MNT/etc/systemd/system/multi-user.target.wants/pacman-keyring-init.service"
 fi
+
+# Expansao do filesystem na primeira boot. A imagem ext4 e gerada com 3 GiB
+# fixos (truncate + mkfs), mas o fastboot grava ela numa particao userdata
+# de ~24 GiB — sem resize2fs sobrariam ~21 GiB inutilizados e a / lota
+# rapido (pacman -Syu enche). Oneshot que se auto-desativa via marker em
+# /var/lib/sanders-rootfs-expanded.
+msg "instalando sanders-rootfs-expand.service (resize2fs no primeiro boot)..."
+cat > "$MNT/etc/systemd/system/sanders-rootfs-expand.service" <<'EOF'
+[Unit]
+Description=Expande o filesystem root para ocupar toda a particao (apenas uma vez)
+DefaultDependencies=no
+After=systemd-remount-fs.service
+Before=local-fs.target sysinit.target
+ConditionPathExists=!/var/lib/sanders-rootfs-expanded
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'ROOT=$(findmnt -no SOURCE /); echo "expanding $ROOT"; /usr/sbin/resize2fs "$ROOT"'
+ExecStartPost=/bin/sh -c 'mkdir -p /var/lib && touch /var/lib/sanders-rootfs-expanded'
+
+[Install]
+WantedBy=sysinit.target
+EOF
+mkdir -p "$MNT/etc/systemd/system/sysinit.target.wants"
+ln -sf /etc/systemd/system/sanders-rootfs-expand.service \
+    "$MNT/etc/systemd/system/sysinit.target.wants/sanders-rootfs-expand.service"
 
 # Permite login root via console serial
 echo "ttyMSM0" >> "$MNT/etc/securetty" 2>/dev/null || true
@@ -199,9 +245,23 @@ mkdir -p "$MNT/etc/systemd/system/timers.target.wants"
 ln -sf /etc/systemd/system/usb-keepalive.timer \
     "$MNT/etc/systemd/system/timers.target.wants/usb-keepalive.timer"
 
+# Overlay especifico do flavor (weston.ini, weston.service, etc).
+# cp -a preserva symlinks (incluindo os de multi-user.target.wants).
+OVERLAY="$REPO/rootfs-overlay/$FLAVOR"
+if [ -d "$OVERLAY" ]; then
+    msg "aplicando overlay $FLAVOR ($OVERLAY)..."
+    cp -a "$OVERLAY"/. "$MNT"/
+fi
+
+# Desktop: weston.service substitui getty@tty1. Remove o drop-in de
+# autologin pra evitar conflito (weston.service tem Conflicts=getty@tty1).
+if [ "$FLAVOR" = "desktop" ]; then
+    rm -rf "$MNT/etc/systemd/system/getty@tty1.service.d"
+fi
+
 sync
 umount "$MNT"
 rmdir "$MNT"
 
-msg "OK: $ROOTFS_IMG ($(du -h "$ROOTFS_IMG" | cut -f1))"
+msg "OK: $ROOTFS_IMG ($(du -h "$ROOTFS_IMG" | cut -f1)) [FLAVOR=$FLAVOR]"
 msg "Login default Arch ARM: root/root  ou  alarm/alarm"

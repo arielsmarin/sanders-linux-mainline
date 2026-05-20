@@ -1,0 +1,17 @@
+[Unit]
+Description=Weston Wayland compositor on SimpleDRM
+After=systemd-user-sessions.service seatd.service
+Wants=seatd.service
+Conflicts=getty@tty1.service
+
+[Service]
+User=root
+Environment=XDG_RUNTIME_DIR=/run/user/0
+ExecStartPre=/bin/mkdir -p /run/user/0
+ExecStartPre=/bin/chmod 700 /run/user/0
+ExecStart=/usr/bin/weston --backend=drm
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

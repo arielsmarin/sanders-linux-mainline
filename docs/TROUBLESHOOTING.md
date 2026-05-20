@@ -218,6 +218,28 @@ desabilitar ACM. ifname do host muda de `enp0s20f0u4i2` (ACM primeiro)
 para `enp0s20f0u4` (ECM primeiro), mas isso é cosmético — o
 `scripts/08-host-net.sh` detecta pelo MAC `02:11:22:33:44:55`.
 
+## 15. Rootfs cheia logo após instalar (df mostra 2.9 GiB, não 24 GiB)
+
+**Sintoma:** `df -h /` reporta 2.9 GiB total / ~100% usado depois de poucos
+`pacman -S`. A partição (`mmcblk0p54`) tem 23.9 GiB, mas o filesystem dentro
+não.
+
+**Causa:** `05-build-rootfs.sh` cria a imagem com `truncate -s 3G` +
+`mkfs.ext4`. O `fastboot flash userdata` grava esses 3 GiB literalmente em
+cima da partição de 24 GiB — o ext4 não cresce sozinho pra ocupar o resto.
+
+**Fix permanente (já no rootfs):** o oneshot
+`sanders-rootfs-expand.service` (instalado pelo `05-build-rootfs.sh`) roda
+no primeiro boot, chama `resize2fs $(findmnt -no SOURCE /)` e cria o marker
+`/var/lib/sanders-rootfs-expanded` pra não rodar de novo.
+
+**Fix manual em rootfs antigo:**
+```bash
+resize2fs /dev/mmcblk0p54
+touch /var/lib/sanders-rootfs-expanded   # impede o oneshot de tentar de novo
+```
+`resize2fs` online (com / montado rw) funciona — não precisa unmount.
+
 ## 14. Interface ECM aparece sem IPv4 (NetworkManager remove o IP estático)
 
 **Sintoma:** rodei `scripts/08-host-net.sh` (ou `ip addr add`), `ip -4 addr`

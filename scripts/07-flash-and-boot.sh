@@ -14,7 +14,8 @@ FLASH=0
 [ -f "$OUT/lk2nd.img" ]        || die "$OUT/lk2nd.img nao existe (rode 01)"
 [ -f "$OUT/boot-sanders.img" ] || die "$OUT/boot-sanders.img nao existe (rode 02-04, 06)"
 if [ $FLASH -eq 1 ]; then
-    [ -f "$ROOTFS_IMG" ] || die "$ROOTFS_IMG nao existe (rode 05)"
+    [ -f "$ROOTFS_IMG" ] || die "$ROOTFS_IMG nao existe (rode 05 com FLAVOR=$FLAVOR)"
+    msg "rootfs alvo: $ROOTFS_IMG (FLAVOR=$FLAVOR)"
 fi
 
 cat <<EOF

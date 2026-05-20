@@ -50,8 +50,10 @@ cd sanders-linux-mainline
 ./scripts/02-build-kernel.sh    # ~15-30 min — clona linux mainline, aplica DTS, compila
 ./scripts/03-build-busybox.sh   # ~2 min — initramfs userspace
 ./scripts/04-build-initramfs.sh # <1 min — empacota cpio
-sudo ./scripts/05-build-rootfs.sh  # ~3 min — Arch Linux ARM ext4 image (precisa sudo)
-./scripts/06-build-boot.sh      # <1 min — Android boot.img
+sudo ./scripts/05-build-rootfs.sh                # headless (default): SSH/SAMBA/server, ~3 GiB
+# OU:
+sudo FLAVOR=desktop ./scripts/05-build-rootfs.sh # desktop: Weston + Xwayland + mesa, ~5 GiB
+./scripts/06-build-boot.sh      # <1 min — Android boot.img (mesmo para os 2 flavors)
 
 # Aparelho em fastboot mode:
 ./scripts/07-flash-and-boot.sh --flash    # ⚠️ APAGA /data do Android
@@ -131,7 +133,9 @@ Build artifacts vão para `build/` e `build/out/` (gitignored).
 - **USB CDC ACM** funcional — autologin root via `picocom /dev/ttyACM0` no host
 - **Rede USB CDC ECM** + NAT no host — phone navega a internet pelo cabo USB (`scripts/08-host-net.sh` configura o lado do PC)
 - **sshd** habilitado no rootfs (root/root) — escutando em 10.42.0.2
-- **Wayland (Weston)** rodando sobre SimpleDRM no framebuffer do bootloader — desktop + teclado virtual + touch FT5436 funcionando. Renderer software (pixman), sem GPU. Autostart via `weston.service` substituindo o getty@tty1.
+- **Dois flavors de rootfs** selecionáveis via `FLAVOR=` no `05-build-rootfs.sh`: `headless` (default, ~3 GiB, server-style — SSH/SAMBA) e `desktop` (~5 GiB, Weston + Xwayland + mesa pré-instalados).
+- **Wayland (Weston)** rodando sobre SimpleDRM no framebuffer do bootloader — desktop + teclado virtual + touch FT5436 funcionando. Renderer software (pixman), sem GPU. Autostart via `weston.service` substituindo o `getty@tty1` (apenas no flavor `desktop`).
+- **OpenGL via Xwayland + llvmpipe** — `glxgears` rodando ~140 FPS (Mesa 26, llvmpipe LLVM 22.1). Stack: glxgears → libGL → llvmpipe → Xwayland → Weston → DRM SimpleDRM. Apenas no flavor `desktop`.
 - **Wi-Fi WCN3680B** parcial — pronto firmware carrega, `wlan0` cria, scan funciona, auth+assoc OK, mas **4-way handshake WPA2 falha** (`hal_config_bss MEM_FAIL`, limitação wcn36xx — veja [`docs/HARDWARE_STATUS.md`](docs/HARDWARE_STATUS.md))
 
 ❌ **Pendente**
