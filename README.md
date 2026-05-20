@@ -131,11 +131,11 @@ Build artifacts vão para `build/` e `build/out/` (gitignored).
 - **USB CDC ACM** funcional — autologin root via `picocom /dev/ttyACM0` no host
 - **Rede USB CDC ECM** + NAT no host — phone navega a internet pelo cabo USB (`scripts/08-host-net.sh` configura o lado do PC)
 - **sshd** habilitado no rootfs (root/root) — escutando em 10.42.0.2
+- **Wayland (Weston)** rodando sobre SimpleDRM no framebuffer do bootloader — desktop + teclado virtual + touch FT5436 funcionando. Renderer software (pixman), sem GPU. Autostart via `weston.service` substituindo o getty@tty1.
 - **Wi-Fi WCN3680B** parcial — pronto firmware carrega, `wlan0` cria, scan funciona, auth+assoc OK, mas **4-way handshake WPA2 falha** (`hal_config_bss MEM_FAIL`, limitação wcn36xx — veja [`docs/HARDWARE_STATUS.md`](docs/HARDWARE_STATUS.md))
 
 ❌ **Pendente**
-- Teclado virtual / stack gráfica (Weston/Phosh/Sxmo) — pra usar o touch pra digitar
-- Display "de verdade" (painel Tianma NT35596 — hoje só `simple-framebuffer`)
+- Display "de verdade" (painel Tianma NT35596 ou DJN ILI7807D — hoje só `simple-framebuffer` exposto como `/dev/dri/card0` via SimpleDRM, sem aceleração GPU)
 - Áudio, sensores, câmera, modem
 
 Veja [`docs/HARDWARE_STATUS.md`](docs/HARDWARE_STATUS.md) para detalhes

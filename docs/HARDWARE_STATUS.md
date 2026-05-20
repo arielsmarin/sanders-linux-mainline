@@ -16,7 +16,8 @@
 | Touchscreen Focaltech FT5436 | ✅ | Reportando eventos ABS/KEY/SYN limpos. Probe via patch (driver mainline `edt-ft5x06` precisa skip-identify). |
 | Wi-Fi (QCA WCN3680B / pronto) | ⚠️ | Hardware OK (scan funciona). Auth+assoc completam. 4-way handshake WPA2 falha com `hal_config_bss MEM_FAIL=5` (limitacao conhecida wcn36xx em msm8953). Veja secao "Wi-Fi WCN3680B" abaixo. |
 | Bluetooth | ❌ | — |
-| Display "de verdade" (painel Tianma NT35596 ou DJN ILI7807D) | ❌ | Driver mainline inexistente, hoje só simple-framebuffer |
+| Display "de verdade" (painel Tianma NT35596 ou DJN ILI7807D) | ❌ | Driver mainline inexistente. `simple-framebuffer` do bootloader exposto como `/dev/dri/card0` via `DRM_SIMPLEDRM` — suficiente pra Weston/Wayland rodar em SW renderer (pixman), sem aceleração. |
+| Wayland (Weston) | ✅ | Compositor DRM rodando sobre SimpleDRM, output 1080×1920@60 `transform=rotate-270`, touch FT5436 + gpio-keys funcionais. Renderer pixman (CPU). Autostart via `weston.service`. Adreno 506 ocioso até termos driver de painel real + freedreno. |
 | Áudio | ❌ | — |
 | Modem (telefonia/dados) | ❌ | — |
 | Câmera | ❌ | — |

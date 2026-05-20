@@ -13,6 +13,19 @@ CONFIG_FRAMEBUFFER_CONSOLE=y
 CONFIG_FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER=y
 CONFIG_LOGO=y
 CONFIG_LOGO_LINUX_CLUT224=y
+
+# DRM SimpleDRM — expoe o simple-framebuffer do bootloader como
+# /dev/dri/card0 com um connector "Virtual-1". Necessario pra Wayland
+# (weston, cage, sway) e GBM. Builtin pq nao temos modprobe no
+# initramfs e o phone ainda nao tem driver de painel real
+# (Tianma NT35596/DJN ILI7807D nao tem driver mainline).
+# Renderer e software (pixman) — Adreno 506 (freedreno) ficaria
+# ocioso ate termos painel DRM real.
+CONFIG_DRM=y
+CONFIG_DRM_SIMPLEDRM=y
+# FBDEV emulado pelo DRM (mantem /dev/fb0 funcional pro fbcon do tty1).
+CONFIG_DRM_FBDEV_EMULATION=y
+CONFIG_DRM_FBDEV_OVERALLOC=100
 # Fonte grande pra display 1080x1920 portrait (16x32 = ~60 colunas legiveis).
 # Selecionada via cmdline `fbcon=font:TER16x32`.
 CONFIG_FONTS=y
