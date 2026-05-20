@@ -38,7 +38,7 @@ BOOT_TAGS_OFFSET="0x00000100"
 BOOT_PAGESIZE="2048"
 
 # Cmdline
-KERNEL_CMDLINE="console=tty0 console=ttyGS0 console=ttyMSM0,115200n8 earlycon ignore_loglevel printk.time=1 printk.devkmsg=on panic=30"
+KERNEL_CMDLINE="console=tty0 console=ttyGS0 console=ttyMSM0,115200n8 earlycon ignore_loglevel printk.time=1 printk.devkmsg=on panic=30 fbcon=font:TER16x32"
 
 mkdir -p "$BUILD" "$OUT"
 

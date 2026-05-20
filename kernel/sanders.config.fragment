@@ -13,6 +13,10 @@ CONFIG_FRAMEBUFFER_CONSOLE=y
 CONFIG_FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER=y
 CONFIG_LOGO=y
 CONFIG_LOGO_LINUX_CLUT224=y
+# Fonte grande pra display 1080x1920 portrait (16x32 = ~60 colunas legiveis).
+# Selecionada via cmdline `fbcon=font:TER16x32`.
+CONFIG_FONTS=y
+CONFIG_FONT_TER16x32=y
 
 # USB Gadget — CDC ACM como console serial via cabo USB.
 # Importante: builtin (=y), nao modulo (=m), pq o initramfs precisa criar
