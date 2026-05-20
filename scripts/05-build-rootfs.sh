@@ -136,6 +136,37 @@ else
     warn "Rode scripts/09-extract-firmware.sh para populá-lo"
 fi
 
+# Keepalive do link USB: ping no host (10.42.0.1) a cada 60s.
+# Sem trafego o cdc_ether/dwc3 ocasionalmente reseta a iface no host
+# (a iface re-enumera, perde IP). Com ping leve continuo o link aguenta
+# indefinidamente (testado 150s a 5s, 60s continuo, zero drops).
+msg "instalando usb-keepalive.timer..."
+cat > "$MNT/etc/systemd/system/usb-keepalive.service" <<'EOF'
+[Unit]
+Description=Ping no host (10.42.0.1) pra manter o link USB ativo
+After=systemd-networkd.service
+Wants=systemd-networkd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/ping -c 1 -W 1 10.42.0.1
+EOF
+cat > "$MNT/etc/systemd/system/usb-keepalive.timer" <<'EOF'
+[Unit]
+Description=Dispara usb-keepalive a cada 60s
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=60s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
+EOF
+mkdir -p "$MNT/etc/systemd/system/timers.target.wants"
+ln -sf /etc/systemd/system/usb-keepalive.timer \
+    "$MNT/etc/systemd/system/timers.target.wants/usb-keepalive.timer"
+
 sync
 umount "$MNT"
 rmdir "$MNT"
