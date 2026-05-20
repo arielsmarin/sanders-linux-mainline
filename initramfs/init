@@ -46,17 +46,18 @@ setup_usb_gadget() {
     /bin/mkdir -p "$G/configs/c.1/strings/0x409"
     echo "CDC ACM" > "$G/configs/c.1/strings/0x409/configuration"
     echo 250       > "$G/configs/c.1/MaxPower"
-    /bin/mkdir -p "$G/functions/acm.usb0"
-    /bin/ln -s "$G/functions/acm.usb0" "$G/configs/c.1/"
+    # ORDEM IMPORTA: ECM antes do ACM. No kernel 7.1.0-rc4 com ACM
+    # criada primeiro, o IN endpoint do ECM nao recebe completion do dwc3
+    # e o TX fica stuck (qdisc backlog enche, tx_packets fica em 0).
     # Funcao ECM (USB ethernet) — vira /sys/class/net/usb0 no phone e
-    # interface usb0/enp... no host. ECM ao inves de NCM: ECM nao tem
-    # agregacao de pacotes, mais simples e estavel (NCM perdia bursts
-    # de RX no host com cdc_ncm). MACs fixos: "host_addr" e o MAC visto
-    # pelo PC, "dev_addr" e o do phone.
+    # interface usb0/enp... no host. MACs fixos: "host_addr" e o MAC
+    # visto pelo PC, "dev_addr" e o do phone.
     /bin/mkdir -p "$G/functions/ecm.usb0"
     echo "02:11:22:33:44:55" > "$G/functions/ecm.usb0/host_addr"
     echo "02:55:44:33:22:11" > "$G/functions/ecm.usb0/dev_addr"
     /bin/ln -s "$G/functions/ecm.usb0" "$G/configs/c.1/"
+    /bin/mkdir -p "$G/functions/acm.usb0"
+    /bin/ln -s "$G/functions/acm.usb0" "$G/configs/c.1/"
     UDC="$1"
     echo "[init] bindando gadget no UDC: $UDC"
     echo "$UDC" > "$G/UDC"

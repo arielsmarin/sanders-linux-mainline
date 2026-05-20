@@ -134,7 +134,6 @@ Build artifacts vão para `build/` e `build/out/` (gitignored).
 - **Wi-Fi WCN3680B** parcial — pronto firmware carrega, `wlan0` cria, scan funciona, auth+assoc OK, mas **4-way handshake WPA2 falha** (`hal_config_bss MEM_FAIL`, limitação wcn36xx — veja [`docs/HARDWARE_STATUS.md`](docs/HARDWARE_STATUS.md))
 
 ❌ **Pendente**
-- Link USB CDC ECM/ACM caindo intermitentemente (a investigar)
 - Teclado virtual / stack gráfica (Weston/Phosh/Sxmo) — pra usar o touch pra digitar
 - Display "de verdade" (painel Tianma NT35596 — hoje só `simple-framebuffer`)
 - Áudio, sensores, câmera, modem

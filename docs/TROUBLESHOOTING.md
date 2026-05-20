@@ -196,3 +196,50 @@ Scripts auxiliares em `tools/unpack_bootimg.py` e `tools/qcdt_extract.py`.
 Sem esse passo, "deve ser igual ao potter" é um chute caro — no caso do
 touch, custou muitas iterações até descobrir que o sanders usa Focaltech
 FT5436 (não Synaptics RMI4 como o potter).
+
+## 13. USB CDC ECM com TX stuck (qdisc enche, tx_packets fica em 0)
+
+**Sintoma:** após rebuild com kernel 7.1.0-rc4, a interface ECM no host
+enumera normalmente (carrier=1, RX cresce), mas nenhum pacote sai do host
+pro phone. `tc -s qdisc show dev <iface>` mostra backlog enchendo
+(centenas de pacotes presos), `tx_packets` permanece zerado e
+`ping 10.42.0.2` perde 100%.
+
+**Causa:** ordem em que as functions são registradas no configfs do
+gadget. Se `acm.usb0` for criada *antes* de `ecm.usb0`, no kernel
+7.1.0-rc4 o IN endpoint do ECM não recebe completion do dwc3 — o
+`u_ether` faz `netif_stop_queue` e nunca religa. Em kernels mais
+antigos (até 2026-05-19, v7.0) o mesmo init funcionava nas duas ordens.
+
+**Fix:** no `initramfs/init`, criar `ecm.usb0` primeiro e só depois
+`acm.usb0`. Mudar a ordem dos `mkdir`/`ln -s` em `setup_usb_gadget()`
+basta — não precisa pinar kernel, nem trocar ECM por RNDIS, nem
+desabilitar ACM. ifname do host muda de `enp0s20f0u4i2` (ACM primeiro)
+para `enp0s20f0u4` (ECM primeiro), mas isso é cosmético — o
+`scripts/08-host-net.sh` detecta pelo MAC `02:11:22:33:44:55`.
+
+## 14. Interface ECM aparece sem IPv4 (NetworkManager remove o IP estático)
+
+**Sintoma:** rodei `scripts/08-host-net.sh` (ou `ip addr add`), `ip -4 addr`
+mostra `10.42.0.1/24` por alguns segundos, e logo depois o IP some sozinho.
+A interface continua UP, carrier=1, MAC certo — só o IPv4 sumiu.
+
+**Causa:** o NetworkManager classifica `enp0s...` como ethernet padrão,
+tenta DHCP, o phone não responde DHCP, NM marca a interface como
+`disconnected` e *limpa* qualquer endereço IPv4 que estiver lá — inclusive
+o que setamos manualmente. `journalctl -u NetworkManager` mostra
+`state change: ip-config -> failed (reason 'ip-config-unavailable')`
+seguido de `failed -> disconnected`.
+
+**Fix:** criar uma conexão NM estática para essa interface:
+
+```bash
+sudo nmcli connection add type ethernet ifname enp0s20f0u4 \
+    con-name sanders-ecm ipv4.method manual \
+    ipv4.addresses 10.42.0.1/24 ipv6.method ignore \
+    connection.autoconnect yes
+sudo nmcli connection up sanders-ecm
+```
+
+Com isso o NM aplica o IP automaticamente toda vez que a interface
+aparece, e o `08-host-net.sh` só precisa cuidar de NAT/forward.

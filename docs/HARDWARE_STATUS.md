@@ -1,6 +1,6 @@
 # Hardware status
 
-Última atualização: 2026-05-19.
+Última atualização: 2026-05-20.
 
 ## Visão geral
 
@@ -12,7 +12,7 @@
 | systemd / userspace Arch ARM | ✅ | Boot até shell root (autologin no tty1 via drop-in `getty@tty1.service.d/autologin.conf`) |
 | Framebuffer console | ✅ | `simple-framebuffer` do bootloader; rotated portrait |
 | USB CDC ACM (console serial via cabo USB) | ✅ | Autologin root via `serial-getty@ttyGS0` do systemd. Estável após drop-in com `TTYReset/Hangup/VTDisallocate=no` + udev no-autosuspend. |
-| USB CDC ECM (rede sobre cabo USB) | ✅ | `usb0` no phone @ 10.42.0.2/24, host @ 10.42.0.1/24. NAT no host via `scripts/08-host-net.sh` da acesso a internet (`ping google.com` ~10ms). NCM testado mas perdia RX no host — trocado por ECM. SSH interativo a validar com ECM. |
+| USB CDC ECM (rede sobre cabo USB) | ✅ | `usb0` no phone @ 10.42.0.2/24, host @ 10.42.0.1/24, SSH `root@10.42.0.2` OK. NAT no host via `scripts/08-host-net.sh`. **Ordem das functions no initramfs importa**: ECM tem que ser registrada *antes* da ACM (kernel 7.1.0-rc4 faz TX stuck do ECM se ACM vier primeiro — qdisc enche e tx_packets fica em 0). Veja TROUBLESHOOTING #13. |
 | Touchscreen Focaltech FT5436 | ✅ | Reportando eventos ABS/KEY/SYN limpos. Probe via patch (driver mainline `edt-ft5x06` precisa skip-identify). |
 | Wi-Fi (QCA WCN3680B / pronto) | ⚠️ | Hardware OK (scan funciona). Auth+assoc completam. 4-way handshake WPA2 falha com `hal_config_bss MEM_FAIL=5` (limitacao conhecida wcn36xx em msm8953). Veja secao "Wi-Fi WCN3680B" abaixo. |
 | Bluetooth | ❌ | — |
