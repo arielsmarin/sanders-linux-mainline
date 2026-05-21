@@ -15,7 +15,7 @@
 | USB CDC ECM (rede sobre cabo USB) | ✅ | `usb0` no phone @ 10.42.0.2/24, host @ 10.42.0.1/24, SSH `root@10.42.0.2` OK. NAT no host via `scripts/08-host-net.sh`. **Ordem das functions no initramfs importa**: ECM tem que ser registrada *antes* da ACM (kernel 7.1.0-rc4 faz TX stuck do ECM se ACM vier primeiro — qdisc enche e tx_packets fica em 0). Veja TROUBLESHOOTING #13. |
 | Touchscreen Focaltech FT5436 | ✅ | Reportando eventos ABS/KEY/SYN limpos. Probe via patch (driver mainline `edt-ft5x06` precisa skip-identify). |
 | Wi-Fi (QCA WCN3680B / pronto) | ⚠️ | Hardware OK (scan funciona). Auth+assoc completam. 4-way handshake WPA2 falha com `hal_config_bss MEM_FAIL=5`. Investigado a fundo em 2026-05-20 — **bloqueio upstream**, sem solução pratica nesta sessao. Veja secao "Wi-Fi WCN3680B" abaixo. |
-| Bluetooth WCN3680B | ✅ | Mesmo chip do Wi-Fi (Pronto). Driver mainline `btqcomsmd` sobe limpo, `hci0` ativo, BR/EDR + BLE OK, scan/discovery/pareamento validados. DT (`qcom,wcnss-bt`) já vem pronto no `msm8953.dtsi` como subnode de `wcnss/smd-edge/wcnss_ctrl` — só precisou habilitar `CONFIG_BT*` + `CONFIG_BT_QCOMSMD=y`. MAC atual é locally-administered (`02:xx:..`), provavelmente fallback porque o nv/mac não está acessível — funcional, mas não persistente entre boots. |
+| Bluetooth WCN3680B | ✅ | Mesmo chip do Wi-Fi (Pronto). Driver mainline `btqcomsmd` sobe limpo, `hci0` ativo, BR/EDR + BLE OK, scan/discovery/pareamento validados. DT (`qcom,wcnss-bt`) já vem pronto no `msm8953.dtsi` como subnode de `wcnss/smd-edge/wcnss_ctrl` — só precisou habilitar `CONFIG_BT*` + `CONFIG_BT_QCOMSMD=y`. **MAC de fábrica restaurado** via `sanders-bt-mac.service` (lê `/persist/bluetooth/.bt_nv.bin`, formato NV Qualcomm, e injeta no controller via `btmgmt public-addr` antes do `bluetooth.service`). OUI Motorola real preservada — pareamento agora persiste entre boots. |
 | Display "de verdade" (painel Tianma NT35596 ou DJN ILI7807D) | ❌ | Driver mainline inexistente. `simple-framebuffer` do bootloader exposto como `/dev/dri/card0` via `DRM_SIMPLEDRM` — suficiente pra Weston/Wayland rodar em SW renderer (pixman), sem aceleração. |
 | Wayland (Weston) | ✅ | Compositor DRM rodando sobre SimpleDRM, output 1080×1920@60 `transform=rotate-270`, touch FT5436 + gpio-keys funcionais. Renderer pixman (CPU). Disponível no flavor `desktop` mas **não habilitado** por default (Phosh é o default). Adreno 506 ocioso até termos driver de painel real + freedreno. |
 | Phosh + Phoc + Squeekboard | ✅ | Shell mobile estilo Android (lockscreen, app drawer, painel). Compositor Phoc (wlroots) com `WLR_RENDERER=pixman` (EGL/GBM em simpledrm não fecha o ciclo de buffers — veja TROUBLESHOOTING #16). Squeekboard como OSK integrado, aparece em qualquer cliente Wayland que ative `text-input-v3` ou `virtual-keyboard-v1`. `scale=3` no `phoc.ini` (painel ~400 DPI). Default no flavor `desktop`. |
@@ -291,12 +291,32 @@ expõe e fala HCI puro com o firmware. Nada que dependa da pilha
 - `bluetoothctl scan on` descobre devices vizinhos.
 - `discoverable on` + `pairable on` → pareado com outro phone Android OK.
 
-**Pendências (não bloqueantes):**
-- MAC `02:00:7F:53:68:75` é locally-administered. O firmware do pronto
-  normalmente lê o MAC BT da partição `mac`/`nv` do device. Como não
-  estamos tocando essas partições, o driver gera um MAC aleatório a
-  cada boot. Para MAC persistente real, extrair do `nv` do stock e
-  injetar via `btmgmt` no boot, ou montar a partição readonly e ler.
+**MAC de fábrica restaurado (2026-05-21):**
+
+O driver `btqcomsmd` não consulta a NV/persist do device, então sem
+intervenção o controller sobe com MAC locally-administered aleatório
+(`02:xx:..`) a cada boot — pareamento nenhum persiste.
+
+Solução: o stock guarda o MAC em `/persist/bluetooth/.bt_nv.bin` no
+formato NV Qualcomm — 9 bytes, header `01 01 06` (type=1, item=1,
+len=6) + 6 bytes do MAC em **little-endian** (byte-reversed).
+
+Ex.: arquivo contém `01 01 06 7c 4f df 14 77 d0` → MAC real é
+`D0:77:14:DF:4F:7C` (OUI Motorola).
+
+`/usr/local/bin/sanders-bt-mac.sh` (no overlay common) faz:
+1. Monta `/dev/disk/by-partlabel/persist` read-only em `/run/...`.
+2. Lê os 9 bytes, valida o header, extrai os 6 invertidos.
+3. `btmgmt --index 0 power off && public-addr $MAC && power on`.
+4. Desmonta `/persist` no exit (`trap`).
+
+`sanders-bt-mac.service` (oneshot) roda com:
+- `Before=bluetooth.service`
+- `WantedBy=bluetooth.service`
+- `ConditionPathExists=/dev/disk/by-partlabel/persist`
+
+Validado em ambos os flavors (overlay `common`). Pareamento com
+outro phone Android agora sobrevive reboot.
 
 ### Sensor LTR559 — ⚠️ PARCIAL
 

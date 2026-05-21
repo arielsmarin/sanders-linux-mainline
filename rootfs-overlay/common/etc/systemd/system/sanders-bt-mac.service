@@ -1,0 +1,14 @@
+[Unit]
+Description=Restore Bluetooth MAC from /persist (sanders)
+DefaultDependencies=no
+After=local-fs.target
+Before=bluetooth.service
+ConditionPathExists=/dev/disk/by-partlabel/persist
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/sanders-bt-mac.sh
+
+[Install]
+WantedBy=bluetooth.service
