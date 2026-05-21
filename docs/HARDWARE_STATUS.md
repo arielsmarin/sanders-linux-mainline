@@ -15,7 +15,7 @@
 | USB CDC ECM (rede sobre cabo USB) | ✅ | `usb0` no phone @ 10.42.0.2/24, host @ 10.42.0.1/24, SSH `root@10.42.0.2` OK. NAT no host via `scripts/08-host-net.sh`. **Ordem das functions no initramfs importa**: ECM tem que ser registrada *antes* da ACM (kernel 7.1.0-rc4 faz TX stuck do ECM se ACM vier primeiro — qdisc enche e tx_packets fica em 0). Veja TROUBLESHOOTING #13. |
 | Touchscreen Focaltech FT5436 | ✅ | Reportando eventos ABS/KEY/SYN limpos. Probe via patch (driver mainline `edt-ft5x06` precisa skip-identify). |
 | Wi-Fi (QCA WCN3680B / pronto) | ⚠️ | Hardware OK (scan funciona). Auth+assoc completam. 4-way handshake WPA2 falha com `hal_config_bss MEM_FAIL=5`. Investigado a fundo em 2026-05-20 — **bloqueio upstream**, sem solução pratica nesta sessao. Veja secao "Wi-Fi WCN3680B" abaixo. |
-| Bluetooth | ❌ | — |
+| Bluetooth WCN3680B | ✅ | Mesmo chip do Wi-Fi (Pronto). Driver mainline `btqcomsmd` sobe limpo, `hci0` ativo, BR/EDR + BLE OK, scan/discovery/pareamento validados. DT (`qcom,wcnss-bt`) já vem pronto no `msm8953.dtsi` como subnode de `wcnss/smd-edge/wcnss_ctrl` — só precisou habilitar `CONFIG_BT*` + `CONFIG_BT_QCOMSMD=y`. MAC atual é locally-administered (`02:xx:..`), provavelmente fallback porque o nv/mac não está acessível — funcional, mas não persistente entre boots. |
 | Display "de verdade" (painel Tianma NT35596 ou DJN ILI7807D) | ❌ | Driver mainline inexistente. `simple-framebuffer` do bootloader exposto como `/dev/dri/card0` via `DRM_SIMPLEDRM` — suficiente pra Weston/Wayland rodar em SW renderer (pixman), sem aceleração. |
 | Wayland (Weston) | ✅ | Compositor DRM rodando sobre SimpleDRM, output 1080×1920@60 `transform=rotate-270`, touch FT5436 + gpio-keys funcionais. Renderer pixman (CPU). Disponível no flavor `desktop` mas **não habilitado** por default (Phosh é o default). Adreno 506 ocioso até termos driver de painel real + freedreno. |
 | Phosh + Phoc + Squeekboard | ✅ | Shell mobile estilo Android (lockscreen, app drawer, painel). Compositor Phoc (wlroots) com `WLR_RENDERER=pixman` (EGL/GBM em simpledrm não fecha o ciclo de buffers — veja TROUBLESHOOTING #16). Squeekboard como OSK integrado, aparece em qualquer cliente Wayland que ative `text-input-v3` ou `virtual-keyboard-v1`. `scale=3` no `phoc.ini` (painel ~400 DPI). Default no flavor `desktop`. |
@@ -245,6 +245,57 @@ fixes acima sao upstream-quality, mas o problema raiz e firmware-side.
 **Wi-Fi marcado como FECHADO nesta sessao**. Retomar so quando:
 - Comunidade mainline wcn36xx mergear o fix do MEM_FAIL upstream, OU
 - Tivermos cycles pra fazer RE da Pronto FW.
+
+### Bluetooth WCN3680B — ✅ FUNCIONANDO
+
+**Resolvido em 2026-05-21.**
+
+Mesmo SoC `pronto` do Wi-Fi, mas o caminho BT é totalmente independente
+no kernel: `btqcomsmd` consome o canal SMD/RPMSG que o `wcnss_ctrl` já
+expõe e fala HCI puro com o firmware. Nada que dependa da pilha
+`hal_config_*` quebrada do Wi-Fi.
+
+**O que foi preciso:**
+
+1. Verificar que `msm8953.dtsi` já tinha o subnode:
+   ```
+   smd-edge {
+       wcnss {
+           wcnss_bt: bluetooth { compatible = "qcom,wcnss-bt"; };
+           ...
+       };
+   };
+   ```
+   Sem alterações no DT.
+
+2. Habilitar no `kernel/sanders.config.fragment`:
+   ```
+   CONFIG_BT=y
+   CONFIG_BT_BREDR=y
+   CONFIG_BT_LE=y
+   CONFIG_BT_LE_L2CAP_ECRED=y
+   CONFIG_BT_QCOMSMD=y
+   CONFIG_BT_QCA=y
+   CONFIG_BT_HIDP=y
+   CONFIG_BT_RFCOMM=y
+   CONFIG_BT_BNEP=y
+   ```
+   Tudo builtin (`=y`) porque não há modprobe no initramfs.
+
+3. `pacman -S bluez bluez-utils` no rootfs e `systemctl enable bluetooth`.
+
+**Validação:**
+- `dmesg`: `Bluetooth: Core ver 2.22` + `RFCOMM/BNEP/HIDP` registrados.
+- `/sys/class/bluetooth/hci0` presente.
+- `bluetoothctl scan on` descobre devices vizinhos.
+- `discoverable on` + `pairable on` → pareado com outro phone Android OK.
+
+**Pendências (não bloqueantes):**
+- MAC `02:00:7F:53:68:75` é locally-administered. O firmware do pronto
+  normalmente lê o MAC BT da partição `mac`/`nv` do device. Como não
+  estamos tocando essas partições, o driver gera um MAC aleatório a
+  cada boot. Para MAC persistente real, extrair do `nv` do stock e
+  injetar via `btmgmt` no boot, ou montar a partição readonly e ler.
 
 ### Painel de display
 
