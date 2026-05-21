@@ -76,8 +76,49 @@ if [ "$MAC" = "00:00:00:00:00:00" ] || [ "$MAC" = "FF:FF:FF:FF:FF:FF" ]; then
     exit 0
 fi
 
-echo "sanders-bt-mac: applying $MAC to hci0"
-# btmgmt public-addr exige adapter unpowered; depois sobe denovo.
-btmgmt --index 0 power off || true
-btmgmt --index 0 public-addr "$MAC"
-btmgmt --index 0 power on
+# btmgmt sob systemd nao tem TTY na stdin. Com stdin=/dev/null ele trava
+# (nao da EOF clean — bug de versao da bluez-utils ou intencional pro modo
+# interativo). Solucao: rodar via `script -qc` (util-linux), que aloca
+# um pseudo-tty efemero e btmgmt processa o comando e sai limpo.
+# Sem script: btmgmt info levaria 3s timeout e devolveria stdout vazio.
+# Com script: ~50ms.
+btmgmt_run() {
+    script -qc "btmgmt --index 0 $*" /dev/null
+}
+
+current_mac() {
+    btmgmt_run info 2>/dev/null \
+        | awk '/Primary controller/ { found=1; next } found && /^[[:space:]]*addr / { print toupper($2); exit }'
+}
+
+# `set +e` localmente — btmgmt as vezes retorna erro mesmo aplicando.
+set +e
+
+CUR=$(current_mac)
+if [ "$CUR" = "$MAC" ]; then
+    echo "sanders-bt-mac: hci0 ja esta com $MAC"
+    exit 0
+fi
+
+echo "sanders-bt-mac: applying $MAC to hci0 (estava $CUR)"
+
+btmgmt_run power off       >/dev/null 2>&1
+btmgmt_run public-addr "$MAC" >/dev/null 2>&1
+
+# public-addr pode re-criar o controller; espera hci0 voltar (ate 5s).
+for _ in 1 2 3 4 5; do
+    [ -e /sys/class/bluetooth/hci0 ] && break
+    sleep 1
+done
+
+btmgmt_run power on >/dev/null 2>&1
+
+# Validacao final.
+CUR=$(current_mac)
+if [ "$CUR" = "$MAC" ]; then
+    echo "sanders-bt-mac: hci0 agora com $MAC"
+    exit 0
+fi
+
+echo "sanders-bt-mac: aplicou public-addr mas info reporta '$CUR'" >&2
+exit 1
