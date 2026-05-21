@@ -204,6 +204,48 @@ pra ler.
 **Workaround atual**: cabo USB CDC ECM da acesso a internet, suficiente
 pro proposito atual do dispositivo.
 
+**Continuacao 2026-05-20 (RE diferencial mainline vs prima/qcacld)**:
+
+Clonado kernel downstream `Sanders-Revived/kernel_motorola_msm8953@4.9.337`
+que tem `drivers/staging/prima/` (qcacld) — o vendor driver sabidamente
+funcional com esta Pronto FW. Comparados field-by-field:
+
+| Struct/area | Mainline | Prima | Match? |
+|---|---|---|---|
+| `tConfigBssParams` (V0) ordem dos campos | sta no meio (TODO comment) | staContext no fim | **NAO** |
+| `tConfigBssParams_V1` (V1) ordem | sta antes de vht_*, ok | staContext antes de vht_* | sim |
+| `tConfigStaParams_V1` ordem completa | matched 30+ campos | matched | sim |
+| `tSirSupportedRates_V1` layout | 66 bytes | 66 bytes | sim |
+| Enums (`bss_type`, `nw_type`) tamanho | 4 bytes (MAX_ENUM_SIZE = 0x7FFFFFFF) | 4 bytes (idem) | sim |
+| Header `wcn36xx_hal_msg_header` | 8 bytes | 8 bytes | sim |
+| `WLAN_FEATURE_VOWIFI_11R` | ifdef sempre incluido | sanders_defconfig=y → incluido | sim |
+| `tTxComplIndMsg` payload | 4 bytes (apenas status) | **8 bytes** (status + dialogToken) | **NAO** |
+
+**Dois fixes reais aplicados (commit subsequente):**
+
+1. `wcn36xx_hal_config_bss_params` (V0): mover `sta` para o fim. Faz a
+   sugestao do `TODO move sta to the end for 3680` que estava no proprio
+   mainline. **Nao destrava nosso sanders** porque FW 1.5.1.2 > 1.2.2.24
+   faz o driver usar V1 (nao V0). Mas e correto upstream.
+
+2. `wcn36xx_hal_tx_compl_ind_msg`: adicionar `u32 dialog_token` ao final.
+   Faz `len != sizeof(*rsp)` parar de tripar. **Elimina o warning
+   "Bad TX complete indication"** que aparecia em todo TX. **Nao
+   destrava o MEM_FAIL** — esse warning era sintoma colateral, nao
+   causa.
+
+**Estado pos-fixes (2026-05-20)**: `Bad TX complete indication` sumiu.
+`MEM_FAIL=5` em `hal_config_bss/hal_config_sta` continua identico.
+
+**Limite alcancado**: sem disassembly da Pronto FW (Hexagon DSP,
+Qualcomm-specific, semanas de trabalho), nao da pra inferir o que
+`hal_config_bss` quer diferente. Todas as structs visiveis batem. Os
+fixes acima sao upstream-quality, mas o problema raiz e firmware-side.
+
+**Wi-Fi marcado como FECHADO nesta sessao**. Retomar so quando:
+- Comunidade mainline wcn36xx mergear o fix do MEM_FAIL upstream, OU
+- Tivermos cycles pra fazer RE da Pronto FW.
+
 ### Painel de display
 
 Nenhum driver mainline para Tianma NT35596 ou DJN ILI7807D específico
