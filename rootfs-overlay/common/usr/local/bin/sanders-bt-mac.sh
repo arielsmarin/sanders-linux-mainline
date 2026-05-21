@@ -113,12 +113,17 @@ done
 
 btmgmt_run power on >/dev/null 2>&1
 
-# Validacao final.
-CUR=$(current_mac)
-if [ "$CUR" = "$MAC" ]; then
-    echo "sanders-bt-mac: hci0 agora com $MAC"
-    exit 0
-fi
+# Validacao final com retry: depois de `power on` o controller as vezes
+# ainda esta finalizando re-init e `info` devolve string vazia. Tenta
+# por ate ~5s.
+for _ in 1 2 3 4 5; do
+    CUR=$(current_mac)
+    if [ "$CUR" = "$MAC" ]; then
+        echo "sanders-bt-mac: hci0 agora com $MAC"
+        exit 0
+    fi
+    sleep 1
+done
 
 echo "sanders-bt-mac: aplicou public-addr mas info reporta '$CUR'" >&2
 exit 1
