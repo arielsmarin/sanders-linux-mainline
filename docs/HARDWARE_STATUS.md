@@ -23,7 +23,8 @@
 | Áudio | ❌ | — |
 | Modem (telefonia/dados) | ❌ | — |
 | Câmera | ❌ | — |
-| Sensores (acelerômetro, giro, prox, luz) | ❌ | — |
+| Proximidade + luz ambiente (LiteON LTR559) | ⚠️ | I2C @ bus 1 / 0x23 probou OK no driver mainline `ltr501`. `/sys/bus/iio/devices/iio:device0/in_proximity_raw` reage a obstrução (variações 700–960). ALS (`in_intensity_*`, `in_illuminance_input`) trava em 0 — driver inicializa ALS_CONTR mas o chip não emite ALS_RDY no STATUS. Calibração de threshold de proximidade ainda crua (stock usava `ps-threshold=800`, mainline binding só expõe `proximity-near-level` semântico). |
+| Acelerômetro / giroscópio / magnetômetro | ❌ | **Não** estão em I2C no stock — passam pela SSC (Sensor Subsystem) no SLPI/DSP, caminho proprietário (`sns_dsps` blob + IPC QMI). Sem driver mainline prático hoje. Bloqueia autorotate do Phosh. |
 | GPU (Adreno 506) | ❌ | freedreno provavelmente funcionaria com mais trabalho |
 
 ## Detalhes do que **não** funciona ainda
@@ -296,6 +297,50 @@ expõe e fala HCI puro com o firmware. Nada que dependa da pilha
   estamos tocando essas partições, o driver gera um MAC aleatório a
   cada boot. Para MAC persistente real, extrair do `nv` do stock e
   injetar via `btmgmt` no boot, ou montar a partição readonly e ler.
+
+### Sensor LTR559 — ⚠️ PARCIAL
+
+**Em 2026-05-21.**
+
+LiteON LTR559 (proximidade + ALS) está no i2c_7 (BLSP2 QUP3, `7af7000`)
+addr 0x23 com IRQ no GPIO 86, vdd no `pm8953_l10` (2.85V, mesmo do
+FT5436) e vddio no `pm8953_l6` (1.8V always-on). DT criado em `&i2c_7`
+no sanders.dts, driver mainline `ltr501` (cobre 501/559/301) habilitado
+via `CONFIG_LTR501=y` + `CONFIG_IIO=y` (builtin).
+
+**O que funciona:**
+- Probe limpo, sem erros no dmesg.
+- `/sys/bus/i2c/devices/1-0023` presente.
+- `/sys/bus/iio/devices/iio:device0/name` = `ltr559`.
+- `in_proximity_raw` lê valores reais (700–960), reage a obstrução do
+  emissor (variação observada cobrindo o sensor com dedo).
+
+**O que falta:**
+
+1. **ALS travada em 0** — `in_intensity_both_raw`, `in_intensity_ir_raw`,
+   `in_illuminance_input` retornam zero permanentemente. Driver
+   inicializa `ALS_CONTR` com `als_mode_active=BIT(0)` mas a flag
+   `STATUS_ALS_RDY` no registrador `LTR501_ALS_PS_STATUS` (0x8c) nunca
+   seta — chip não está produzindo medidas. Precisa investigar:
+   - Confirmar via i2cget (driver claim hoje impede, precisa unbind).
+   - Verificar se há atraso de power-up entre vdd/vddio que o ltr501
+     mainline não respeita (stock tinha `pinctrl-1 = <&ltr559_sleep>` +
+     toggle no probe, mainline não toca pinctrl em runtime).
+   - Comparar com qualquer outro device mainline usando ltr559.
+
+2. **Calibração de proximidade** — valor "longe" reportado é ~800
+   (saturado pela reflectância do vidro do display). Stock usava
+   `ps-threshold = 800`, `ps-nearoffset = 20`, `ps-faroffset = 15` em
+   propriedades vendor-specific que o mainline não consome. O binding
+   só expõe `proximity-near-level` (semântico pra userspace), e o
+   driver não programa o registrador `PS_OFFSET`. Calibração precisa
+   ser feita em userspace (subtrair baseline) ou patchar driver pra
+   ler offset do DT.
+
+**Acel/giro/magnetômetro:** nada disso está em I2C no sanders. O stock
+DTS confirma: só LTR559 e FT5436 no i2c_7/i2c_3. Sensores de movimento
+passam pela SSC do msm8953 (LPASS/SLPI), via `sns_dsps` (firmware) e
+IPC QMI — sem driver mainline prático. Bloqueia autorotate.
 
 ### Painel de display
 

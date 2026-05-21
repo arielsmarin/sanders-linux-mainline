@@ -148,6 +148,46 @@
 	};
 };
 
+/*
+ * Sensor de proximidade + luz ambiente: LiteON LTR559 no i2c_7 @ 0x23.
+ *
+ * Stock Android (msm8953-sanders.dtsi):
+ *   liteon@23 {
+ *     compatible = "liteon,ltr559";
+ *     vdd-supply = <&pm8953_l10>;       // 2.85V (mesmo do FT5436)
+ *     vio-supply = <&pm8953_l6>;        // 1.8V always-on
+ *     interrupts = <86 IRQ_TYPE_EDGE_FALLING>;
+ *     ltr,ps-threshold = <800>;         // params calibrados pela Moto;
+ *     ltr,ps-nearoffset = <20>;         // mainline ltr501 driver usa
+ *     ltr,ps-faroffset = <15>;          // proximity-near-level (75).
+ *   }
+ *
+ * Driver mainline: drivers/iio/light/ltr501.c (cobre ltr501/559/301).
+ * Expoe via IIO: in_illuminance_raw, in_proximity_raw, eventos em
+ * /dev/iio:device*. Phosh/iio-sensor-proxy consomem direto.
+ *
+ * Acel/giro/magnetom NAO estao em I2C — passam pela SSC (Sensor
+ * Subsystem) no SLPI/DSP, caminho proprietario sem driver mainline
+ * pratico hoje.
+ */
+&i2c_7 {
+	status = "okay";
+	clock-frequency = <400000>;
+
+	light-sensor@23 {
+		compatible = "liteon,ltr559";
+		reg = <0x23>;
+
+		vdd-supply = <&pm8953_l10>;
+		vddio-supply = <&pm8953_l6>;
+
+		interrupt-parent = <&tlmm>;
+		interrupts = <86 IRQ_TYPE_EDGE_FALLING>;
+
+		proximity-near-level = <75>;
+	};
+};
+
 &pm8953_resin {
 	linux,code = <KEY_VOLUMEDOWN>;
 	status = "okay";
