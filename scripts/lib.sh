@@ -32,7 +32,7 @@ BUSYBOX_VER="1.36.1"
 LK2ND_FORK="https://github.com/playday3008/lk2nd.git"
 LK2ND_COMMIT="c8b47cd"
 LINUX_REPO="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git"
-LINUX_BRANCH="master"
+LINUX_BRANCH="v7.1-rc4"
 ARCH_TARBALL_URL="http://os.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz"
 
 # Cross toolchains
@@ -57,4 +57,32 @@ die()  { echo -e "\033[1;31m[ERRO]\033[0m $*" >&2; exit 1; }
 
 check_cmd() {
     command -v "$1" >/dev/null 2>&1 || die "comando '$1' não encontrado. Veja scripts/00-setup-host.sh"
+}
+
+WCNSS_FIRMWARE_FILES=(
+    wcnss.mdt
+    wcnss.b00
+    wcnss.b01
+    wcnss.b02
+    wcnss.b04
+    wcnss.b06
+    wcnss.b09
+    wcnss.b10
+    wcnss.b11
+    wcnss.b12
+)
+
+check_wcnss_firmware() {
+    local fw missing=0
+
+    for fw in "${WCNSS_FIRMWARE_FILES[@]}"; do
+        if [ ! -s "$REPO/firmware/$fw" ]; then
+            warn "firmware/$fw ausente ou vazio"
+            missing=1
+        fi
+    done
+
+    if [ "$missing" != "0" ]; then
+        die "firmware WCNSS incompleto; rode scripts/09-extract-firmware.sh ou copie os blobs stock do modem"
+    fi
 }

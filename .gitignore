@@ -35,3 +35,26 @@ busybox
 # por conta (scripts/09-extract-firmware.sh).
 firmware/
 firmware-sanders-orig/
+
+# Claude Code / agentes internos
+.agents/
+skills-lock.json
+CLAUDE.md
+
+# Python bytecode
+**/__pycache__/
+*.pyc
+
+# Scripts de debug ad-hoc de serial (manter apenas scripts/serial_test.py)
+scripts/serial_check.py
+scripts/serial_connect_open.py
+scripts/serial_debug_ssid.py
+scripts/serial_dump_req.py
+scripts/serial_full_test.py
+scripts/serial_get_req_hex.py
+scripts/serial_reboot.py
+
+# Patches de debug e experimentos descartados
+# 0004: instrumentação temporária supersedida pelo fix real (0005/0006)
+kernel/0004-wcn36xx-debug-bss-index.patch
+kernel/experiments/

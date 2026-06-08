@@ -1,0 +1,47 @@
+From: sanders-linux-mainline port
+Date: 2026-06-06
+Subject: [PATCH] arm64: dts: qcom: msm8953: fix wcnss reserved memory range
+
+The WCNSS/Pronto firmware ELF (wcnss.mdt) loads its first PT_LOAD segment
+at physical address 0x8e600000, but the reserved memory region was defined
+starting at 0x8e700000 — 1MB too high.
+
+qcom_mdt_load() validates that every PT_LOAD segment falls within the
+reserved region:
+
+  if (phdr->p_paddr < mem_phys)
+      return -EINVAL;
+
+This caused qcom-wcnss-pil to fail unconditionally with -22 (EINVAL) on
+any wcnss firmware, regardless of the actual firmware content.
+
+Firmware load range (from wcnss.mdt program headers):
+  First segment: 0x8e600000
+  Last segment:  0x8ec56128  (total ~6.3 MB, fits within 7 MB region)
+
+Fix: move the WCNSS reserved region base from 0x8e700000 to 0x8e600000,
+keeping the same 7 MB size (0x700000). Shorten the adjacent ADSP reserved
+region by 1 MB so it ends at 0x8e600000 and does not overlap WCNSS.
+
+Signed-off-by: sanders-linux-mainline port
+---
+ arch/arm64/boot/dts/qcom/msm8953.dtsi | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8953.dtsi b/arch/arm64/boot/dts/qcom/msm8953.dtsi
+index 753167c3f..97de4fb56 100644
+--- a/arch/arm64/boot/dts/qcom/msm8953.dtsi
++++ b/arch/arm64/boot/dts/qcom/msm8953.dtsi
+@@ -314,4 +314,4 @@ mpss_mem: mpss@86c00000 {
+ 		adsp_fw_mem: adsp@8d600000 {
+-			reg = <0x0 0x8d600000 0x0 0x1100000>;
++			reg = <0x0 0x8d600000 0x0 0x1000000>;
+ 			no-map;
+ 		};
+@@ -319,4 +319,4 @@ mpss_mem: mpss@86c00000 {
+-		wcnss_fw_mem: wcnss@8e700000 {
+-			reg = <0x0 0x8e700000 0x0 0x700000>;
++		wcnss_fw_mem: wcnss@8e600000 {
++			reg = <0x0 0x8e600000 0x0 0x700000>;
+ 			no-map;
+ 		};

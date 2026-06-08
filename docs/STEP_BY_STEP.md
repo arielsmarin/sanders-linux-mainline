@@ -46,16 +46,19 @@ publicados também não funcionam neste device (testado). Mais detalhes em
 ./scripts/02-build-kernel.sh
 ```
 
-Primeira execução: clona Linux mainline (shallow, branch `master`,
+Primeira execução: clona Linux mainline (shallow, branch `v7.1-rc4`,
 ~300 MiB).
 
 A cada execução:
 1. Copia `dts/msm8953-motorola-sanders.dts` para
    `arch/arm64/boot/dts/qcom/`.
 2. Adiciona entrada no `Makefile` do diretório DTS.
-3. Aplica o config fragment `kernel/sanders.config.fragment` sobre o
+3. Aplica automaticamente os patches `kernel/*.patch` em ordem. Patches em
+   `kernel/experiments/` nao entram aqui; aplique manualmente quando quiser
+   rodar um teste nao final.
+4. Aplica o config fragment `kernel/sanders.config.fragment` sobre o
    arm64 `defconfig`.
-4. Compila `Image.gz` (~15 MiB) e DTBs.
+5. Compila `Image.gz` (~15 MiB) e DTBs.
 
 **Configs builtin essenciais** (no fragment):
 
@@ -91,6 +94,10 @@ Monta `build/initramfs-root/` com:
 
 Compacta em `build/out/initramfs.cpio.gz` (~1.1 MiB).
 
+Antes de compactar, valida e copia explicitamente os blobs WCNSS:
+`wcnss.mdt`, `wcnss.b00`, `b01`, `b02`, `b04`, `b06`, `b09`, `b10`,
+`b11`, `b12`.
+
 ### O que o `init` faz
 
 1. Monta virtuais (`proc`, `sys`, `dev`, `run`, `tmp`, `configfs`).
@@ -116,8 +123,10 @@ sudo ./scripts/05-build-rootfs.sh
 2. Cria imagem ext4 de 3 GiB com `LABEL=rootfs`.
 3. Monta loop, extrai tarball preservando perms, adiciona `ttyMSM0` e
    `ttyGS0` em `/etc/securetty`.
+4. Valida e instala os mesmos blobs WCNSS do initramfs em `/lib/firmware/`.
 
-Saída: `build/rootfs-arch.img` (3 GiB sparse).
+Saída: `build/rootfs-arch-headless.img` por default, ou
+`build/rootfs-arch-desktop.img` com `FLAVOR=desktop`.
 
 **Credenciais default Arch Linux ARM:** `root/root` e `alarm/alarm`.
 

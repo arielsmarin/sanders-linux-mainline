@@ -1,6 +1,6 @@
 # Hardware status
 
-Última atualização: 2026-05-20.
+Última atualização: 2026-06-06.
 
 ## Visão geral
 
@@ -14,7 +14,7 @@
 | USB CDC ACM (console serial via cabo USB) | ✅ | Autologin root via `serial-getty@ttyGS0` do systemd. Estável após drop-in com `TTYReset/Hangup/VTDisallocate=no` + udev no-autosuspend. |
 | USB CDC ECM (rede sobre cabo USB) | ✅ | `usb0` no phone @ 10.42.0.2/24, host @ 10.42.0.1/24, SSH `root@10.42.0.2` OK. NAT no host via `scripts/08-host-net.sh`. **Ordem das functions no initramfs importa**: ECM tem que ser registrada *antes* da ACM (kernel 7.1.0-rc4 faz TX stuck do ECM se ACM vier primeiro — qdisc enche e tx_packets fica em 0). Veja TROUBLESHOOTING #13. |
 | Touchscreen Focaltech FT5436 | ✅ | Reportando eventos ABS/KEY/SYN limpos. Probe via patch (driver mainline `edt-ft5x06` precisa skip-identify). |
-| Wi-Fi (QCA WCN3680B / pronto) | ⚠️ | Hardware OK (scan funciona). Auth+assoc completam. 4-way handshake WPA2 falha com `hal_config_bss MEM_FAIL=5`. Investigado a fundo em 2026-05-20 — **bloqueio upstream**, sem solução pratica nesta sessao. Veja secao "Wi-Fi WCN3680B" abaixo. |
+| Wi-Fi (QCA WCN3680B / pronto) | ✅ | Associação WPA2 + DHCP funcionando. Fix: VERSION0 header em CONFIG_BSS/STA (firmware Pronto 1.5.1.2 rejeita VERSION1). Patches: `0005-wcn36xx-fix-hal-msg-version...` + `0006-wcn36xx-send-CONFIG-BSS-before-JOIN`. Veja secao "Wi-Fi WCN3680B" abaixo. |
 | Bluetooth WCN3680B | ✅ | Mesmo chip do Wi-Fi (Pronto). Driver mainline `btqcomsmd` sobe limpo, `hci0` ativo, BR/EDR + BLE OK, scan/discovery/pareamento validados. DT (`qcom,wcnss-bt`) já vem pronto no `msm8953.dtsi` como subnode de `wcnss/smd-edge/wcnss_ctrl` — só precisou habilitar `CONFIG_BT*` + `CONFIG_BT_QCOMSMD=y`. **MAC de fábrica restaurado** via `sanders-bt-mac.service` (lê `/persist/bluetooth/.bt_nv.bin`, formato NV Qualcomm, e injeta no controller via `btmgmt public-addr` antes do `bluetooth.service`). OUI Motorola real preservada — pareamento agora persiste entre boots. |
 | Display "de verdade" (painel Tianma NT35596 ou DJN ILI7807D) | ❌ | Driver mainline inexistente. `simple-framebuffer` do bootloader exposto como `/dev/dri/card0` via `DRM_SIMPLEDRM` — suficiente pra Weston/Wayland rodar em SW renderer (pixman), sem aceleração. |
 | Wayland (Weston) | ✅ | Compositor DRM rodando sobre SimpleDRM, output 1080×1920@60 `transform=rotate-270`, touch FT5436 + gpio-keys funcionais. Renderer pixman (CPU). Disponível no flavor `desktop` mas **não habilitado** por default (Phosh é o default). Adreno 506 ocioso até termos driver de painel real + freedreno. |
@@ -99,7 +99,99 @@ seguíamos chutando "deve ser igual ao potter".
 Para teclado virtual seria necessário stack gráfica (Weston/Phosh/Sxmo),
 que é outro nível de trabalho — mas o touch em si está pronto.
 
-### Wi-Fi WCN3680B (parcial)
+### Wi-Fi WCN3680B — ✅ FUNCIONANDO
+
+**Resolvido em 2026-06-08.**
+
+**Root cause:** o driver mainline usava `INIT_HAL_MSG_V1` (HAL message
+VERSION1) exclusivamente para `CONFIG_BSS_V1` e `CONFIG_STA_V1` quando
+`rf_id == RF_IRIS_WCN3680`.  O firmware Pronto 1.5.1.2 rejeita essas duas
+mensagens com VERSION1 — retornando `MEM_FAIL=5` (status=5).  Todos os
+outros comandos HAL já usavam VERSION0 e funcionavam.
+
+O caminho WCN3620/potter para as mesmas funções usava VERSION0 +
+`len -= WCN36XX_DIFF_{BSS,STA}_PARAMS_V1_NOVHT` — que funciona.
+Aplicar esse mesmo caminho ao WCN3680 corrige o MEM_FAIL completamente.
+
+**Segundo fix:** o mainline enviava JOIN antes de CONFIG_BSS.  Os drivers
+vendor (prima/qcacld) enviam CONFIG_BSS primeiro.  Invertendo a ordem
+(CONFIG_BSS → JOIN) o firmware aloca o contexto BSS antes de sintonizar
+o canal.
+
+**Resultado do teste (2026-06-08):**
+```
+wlan0: associated
+DHCP: 192.168.x.x/24 via dhcpcd
+ping 8.8.8.8: 27ms RTT, 0% loss
+```
+
+**Patches:**
+- `kernel/0005-wcn36xx-fix-hal-msg-version-for-CONFIG-BSS-STA-on-WCN3680.patch`
+- `kernel/0006-wcn36xx-send-CONFIG-BSS-before-JOIN.patch`
+
+---
+
+### Wi-Fi WCN3680B — histórico de investigação (parcial)
+
+**Atualizacao 2026-06-06:** o bloqueio `qcom-wcnss-pil ... error -22`
+nao era firmware "daisy" apenas; tambem havia erro no reserved-memory
+upstream do `msm8953.dtsi` para este firmware. O `wcnss.mdt` stock carrega
+segmentos a partir de `0x8e600000`, enquanto o DT reservava WCNSS em
+`0x8e700000`. O patch `kernel/0003-msm8953-fix-wcnss-reserved-mem-base-address.patch`
+move WCNSS para `0x8e600000` e encurta ADSP para terminar em `0x8e5fffff`,
+removendo o overlap.
+
+Validado no device em 2026-06-06:
+- `adsp@8d600000`: `0x8d600000..0x8e5fffff`
+- `wcnss@8e600000`: `0x8e600000..0x8ecfffff`
+- Copiando `wcnss.*` da particao stock `modem` (`/dev/disk/by-partlabel/modem`,
+  `image/wcnss.*`) para `/lib/firmware/`, `remoteproc0` sobe sem `-22`.
+- `wcn36xx` reporta `firmware API 1.5.1.2`, cria `wlan0`, e
+  `iw dev wlan0 scan` lista redes 2.4/5 GHz.
+
+O rootfs antigo tinha `wpa_supplicant` sem `libpcsclite.so.1`; por isso o
+primeiro teste WPA nem iniciava o supplicant. `scripts/05-build-rootfs.sh`
+agora instala `pcsclite` junto com `wpa_supplicant`, `iw` e `dhcpcd` mesmo em
+hosts sem `arch-chroot`/`pacman`, baixando os pacotes Arch Linux ARM direto.
+
+Reteste com rootfs novo e rede `CASAA_5G` em 2026-06-06: `wpa_supplicant`
+inicia e autentica/associa, mas o kernel ainda registra:
+
+```
+wcn36xx: WARNING hal config bss response failure: 5
+wcn36xx: ERROR hal_config_bss response failed err=-5
+wcn36xx: WARNING hal config sta response failure: 5
+wcn36xx: ERROR hal_config_sta response failed err=-5
+wlan0: deauthenticated ... (Reason: 15=4WAY_HANDSHAKE_TIMEOUT)
+```
+
+Ou seja: o fix de reserved-memory resolve o `-22` e libera scan, mas nao
+resolve o `MEM_FAIL=5` do 4-way handshake.
+
+Para a proxima rodada, a rede 2.4 GHz `CASAA` foi deixada aberta (sem senha)
+para separar falha basal de BSS/STA de falha especifica do WPA2. A rede
+`CASAA_5G` continua sendo o teste WPA2 com senha.
+
+**Diagnostico `bss_index=255` (2026-06-06):** `vif_priv->bss_index` nasce
+como `0xff` (`WCN36XX_HAL_BSS_INVALID_IDX`). `wcn36xx_smd_set_sta_params()`
+copia esse valor para `sta_params->bssid_index`, e o indice so e atualizado
+em `wcn36xx_smd_config_bss_rsp()` quando `CONFIG_BSS_RSP` retorna sucesso.
+Se `CONFIG_BSS_RSP` falha com `MEM_FAIL=5`, o fluxo seguinte pode tentar
+`CONFIG_STA` com `bssid_index=255`.
+
+O patch `kernel/0004-wcn36xx-debug-bss-index.patch` instrumenta
+`CONFIG_BSS_REQ/RSP` e `CONFIG_STA_REQ/RSP`, registra cipher/HT/VHT e recusa
+`CONFIG_STA` enquanto `bss_index` ainda for `255`. Os experimentos ficam fora
+da aplicacao automatica:
+- `kernel/experiments/0005-wcn36xx-experiment-force-bss-index-zero.patch`:
+  forca temporariamente `bss_index=0` antes de `CONFIG_STA`.
+- `kernel/experiments/0006-wcn36xx-experiment-legacy-no-ht.patch`: desliga
+  HT/VHT/AMPDU/40 MHz e forca modo legado (`11G` em 2.4 GHz, `11A` em 5 GHz).
+
+Ordem de teste recomendada: patch principal apenas, `CASAA` aberta em 2.4 GHz,
+`CASAA_5G` WPA2, experimento `force-bss-index-zero`, experimento
+`legacy-no-ht`. O Bluetooth nao entra nessa investigacao e nao precisa ser
+alterado.
 
 O msm8953 usa o chip QCA WCN3680B (pronto) integrado, controlado pelo
 driver mainline `wcn36xx` via `qcom-wcnss-pil` (Peripheral Image Loader).

@@ -34,11 +34,13 @@ fi
 for p in "$REPO"/kernel/*.patch; do
     [ -f "$p" ] || continue
     msg "checando patch $(basename "$p")..."
-    if ! git -C "$LINUX_SRC" apply --check --reverse "$p" 2>/dev/null; then
+    if git -C "$LINUX_SRC" apply --check --reverse "$p" 2>/dev/null; then
+        msg "  ja aplicado (reverso ok), pulando."
+    elif git -C "$LINUX_SRC" apply --check "$p" 2>/dev/null; then
         git -C "$LINUX_SRC" apply "$p" || die "falha aplicando $p"
         msg "  aplicado."
     else
-        msg "  ja aplicado, pulando."
+        msg "  nao aplica limpo (working tree tem mudancas sobrepostas), pulando."
     fi
 done
 

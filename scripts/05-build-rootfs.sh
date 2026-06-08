@@ -7,6 +7,7 @@
 source "$(dirname "$0")/lib.sh"
 check_cmd bsdtar
 check_cmd mkfs.ext4
+check_cmd wget
 
 if [ "$(id -u)" -ne 0 ]; then
     msg "este script precisa de sudo. Reexecutando..."
@@ -38,52 +39,97 @@ msg "extraindo Arch Linux ARM tarball..."
 mount -o loop "$ROOTFS_IMG" "$MNT"
 bsdtar -xpf "$ARCH_TARBALL" -C "$MNT"
 
-# Inicializa pacman keyring no rootfs (via arch-chroot + qemu-user binfmt).
-# Sem isso, no primeiro boot o pacman da:
-#   "Public keyring not found; have you run 'pacman-key --init'?"
-# e nao consegue instalar pacote nenhum. Faz aqui pra deixar tudo pronto.
+# Verifica se arch-chroot + qemu-aarch64 funcionam de verdade (nao so existem).
+# No WSL o binfmt pode estar registrado mas o flag F (fix-binary) ausente, fazendo
+# os binarios aarch64 falharem dentro do chroot mesmo com qemu-aarch64-static presente.
+CHROOT_WORKS=0
 if command -v arch-chroot >/dev/null && [ -f /proc/sys/fs/binfmt_misc/qemu-aarch64 ]; then
+    QEMU_STATIC=$(command -v qemu-aarch64-static 2>/dev/null || echo "")
+    if [ -n "$QEMU_STATIC" ]; then
+        mkdir -p "$MNT/usr/bin"
+        cp "$QEMU_STATIC" "$MNT/usr/bin/qemu-aarch64-static"
+    fi
+    # Teste real: tenta executar /bin/true do rootfs aarch64
+    if arch-chroot "$MNT" /bin/true 2>/dev/null; then
+        CHROOT_WORKS=1
+    fi
+fi
+
+# Fallback para hosts sem arch-chroot funcional e sem pacman nativo:
+# baixa pacotes Arch Linux ARM conhecidos e extrai direto no rootfs.
+# Isto e usado apenas para o userspace Wi-Fi critico; nao tenta resolver
+# dependencias genericamente.
+alarm_direct_install() {
+    local pkg repo file cache_dir url
+    cache_dir="$BUILD/alarm-pkg-cache"
+    mkdir -p "$cache_dir"
+
+    for pkg in "$@"; do
+        case "$pkg" in
+            wpa_supplicant) repo=core;  file="wpa_supplicant-2:2.11-5-aarch64.pkg.tar.xz" ;;
+            iw)             repo=core;  file="iw-6.17-1-aarch64.pkg.tar.xz" ;;
+            dhcpcd)         repo=extra; file="dhcpcd-10.3.2-1-aarch64.pkg.tar.xz" ;;
+            pcsclite)       repo=extra; file="pcsclite-2.5.0-1-aarch64.pkg.tar.xz" ;;
+            *) warn "fallback direto nao conhece pacote: $pkg"; return 1 ;;
+        esac
+
+        url="http://os.archlinuxarm.org/aarch64/$repo/$file"
+        if [ ! -s "$cache_dir/$file" ]; then
+            msg "baixando pacote ALARM direto: $file"
+            wget -O "$cache_dir/$file" "$url" || return 1
+        fi
+
+        msg "extraindo pacote ALARM direto: $file"
+        bsdtar -xpf "$cache_dir/$file" -C "$MNT" \
+            --exclude .BUILDINFO --exclude .INSTALL --exclude .MTREE --exclude .PKGINFO \
+            || return 1
+    done
+}
+
+# Funcao auxiliar: instala pacotes via arch-chroot (se funcionar) ou
+# pacman --root com SigLevel=Never como fallback (sem scripts pos-instalacao).
+pacman_install() {
+    local pkgs="$*"
+    if [ "$CHROOT_WORKS" = "1" ]; then
+        arch-chroot "$MNT" pacman -Sy --noconfirm --needed $pkgs
+    else
+        if ! command -v pacman >/dev/null; then
+            warn "pacman nativo indisponivel no host"
+            return 1
+        fi
+        warn "arch-chroot indisponivel — instalando via pacman --root (sem scripts pos-install)"
+        local tmpconf
+        tmpconf=$(mktemp)
+        # Usa config do target mas sobrepoe SigLevel pois o keyring ainda nao foi init
+        sed 's/^SigLevel.*/SigLevel = Never/' "$MNT/etc/pacman.conf" > "$tmpconf"
+        pacman --root "$MNT" --dbpath "$MNT/var/lib/pacman" \
+            --config "$tmpconf" --cachedir /tmp/pacman-cache-arm \
+            --noscriptlet --noconfirm --needed -Sy $pkgs
+        local rc=$?
+        rm -f "$tmpconf"
+        return "$rc"
+    fi
+}
+
+# Locale: edicao de texto puro, feita direto no host (nao precisa de chroot).
+# locale-gen requer aarch64; deferido para primeiro boot se chroot nao funcionar.
+msg "habilitando locale pt_BR.UTF-8 + en_US.UTF-8..."
+sed -i \
+    -e 's/^#\(pt_BR.UTF-8 UTF-8\)/\1/' \
+    -e 's/^#\(en_US.UTF-8 UTF-8\)/\1/' \
+    "$MNT/etc/locale.gen"
+if [ "$CHROOT_WORKS" = "1" ]; then
     msg "inicializando pacman keyring (via arch-chroot + qemu-aarch64)..."
     arch-chroot "$MNT" pacman-key --init >/dev/null 2>&1 || warn "pacman-key --init falhou"
     arch-chroot "$MNT" pacman-key --populate archlinuxarm >/dev/null 2>&1 \
         || warn "pacman-key --populate archlinuxarm falhou"
-    # Locale pt_BR.UTF-8 (+ en_US.UTF-8 como fallback). Habilita as
-    # entradas em /etc/locale.gen e compila com locale-gen. O LANG=
-    # default vai em rootfs-overlay/common/etc/locale.conf.
-    msg "habilitando locale pt_BR.UTF-8 + en_US.UTF-8..."
-    arch-chroot "$MNT" sed -i \
-        -e 's/^#\(pt_BR.UTF-8 UTF-8\)/\1/' \
-        -e 's/^#\(en_US.UTF-8 UTF-8\)/\1/' \
-        /etc/locale.gen
     arch-chroot "$MNT" locale-gen >/dev/null 2>&1 || warn "locale-gen falhou"
-
-    # Samba: util pros dois flavors (compartilhar /home via Wi-Fi/USB).
-    # Nao habilita servico — usuario decide com `systemctl enable smb nmb`.
-    msg "instalando samba (sem habilitar smb/nmb)..."
-    arch-chroot "$MNT" pacman -Sy --noconfirm --needed samba \
-        || warn "pacman -S samba falhou"
-    if [ "$FLAVOR" = "desktop" ]; then
-        msg "instalando stack desktop (weston + xwayland + mesa) via arch-chroot..."
-        # Instala dois compositores: phosh (default, shell mobile) +
-        # weston (alternativa minimalista). Decisao de qual usar e via
-        # systemctl enable/disable. Default no overlay e phosh.
-        arch-chroot "$MNT" pacman -Sy --noconfirm --needed \
-            phoc phosh squeekboard \
-            weston \
-            seatd libdisplay-info \
-            xorg-xwayland mesa mesa-utils mesa-demos \
-            ttf-dejavu noto-fonts \
-            || die "pacman -S do stack desktop falhou"
-        arch-chroot "$MNT" systemctl enable seatd.service >/dev/null
-    fi
 else
-    warn "arch-chroot/qemu-aarch64 binfmt nao disponivel; keyring sera inicializado no primeiro boot do device"
-    [ "$FLAVOR" = "desktop" ] && \
-        die "FLAVOR=desktop requer arch-chroot + qemu-aarch64 binfmt no host (instale qemu-user-static-binfmt)"
-    # Fallback: cria oneshot service que inicializa o keyring no primeiro boot
+    warn "arch-chroot nao funciona — keyring e locale-gen serao inicializados no primeiro boot"
+    # Fallback: service que inicializa keyring + locale no primeiro boot
     cat > "$MNT/etc/systemd/system/pacman-keyring-init.service" <<'EOF'
 [Unit]
-Description=Inicializa pacman keyring (apenas uma vez)
+Description=Inicializa pacman keyring e locale (apenas uma vez)
 After=network-online.target
 Wants=network-online.target
 ConditionPathExists=!/etc/pacman.d/gnupg/pubring.gpg
@@ -92,13 +138,49 @@ ConditionPathExists=!/etc/pacman.d/gnupg/pubring.gpg
 Type=oneshot
 ExecStart=/usr/bin/pacman-key --init
 ExecStart=/usr/bin/pacman-key --populate archlinuxarm
+ExecStart=/usr/bin/locale-gen
 RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
 EOF
+    mkdir -p "$MNT/etc/systemd/system/multi-user.target.wants"
     ln -sf /etc/systemd/system/pacman-keyring-init.service \
         "$MNT/etc/systemd/system/multi-user.target.wants/pacman-keyring-init.service"
+fi
+
+# Samba: util pros dois flavors (compartilhar /home via Wi-Fi/USB).
+# Nao habilita servico — usuario decide com `systemctl enable smb nmb`.
+msg "instalando samba (sem habilitar smb/nmb)..."
+pacman_install samba || warn "samba nao instalado neste build (pacman/chroot indisponivel)"
+
+# Wi-Fi userspace: wpa_supplicant (WPA2/WPA3 4-way handshake),
+# iw (scan/management), dhcpcd (IP por DHCP). pcsclite fornece
+# libpcsclite.so.1, linkada pelo wpa_supplicant do Arch Linux ARM.
+# Sem acesso a internet no device (USB ECM instavel), tem que vir embutido.
+msg "instalando wpa_supplicant iw dhcpcd pcsclite..."
+if ! pacman_install wpa_supplicant iw dhcpcd pcsclite; then
+    warn "pacman/chroot falhou para Wi-Fi; usando fallback direto ALARM"
+    alarm_direct_install wpa_supplicant iw dhcpcd pcsclite \
+        || die "falha instalando userspace Wi-Fi via fallback direto"
+fi
+
+if [ "$FLAVOR" = "desktop" ]; then
+    if [ "$CHROOT_WORKS" != "1" ]; then
+        die "FLAVOR=desktop requer arch-chroot + qemu-aarch64 funcionando no host"
+    fi
+    msg "instalando stack desktop (weston + xwayland + mesa) via arch-chroot..."
+    # Instala dois compositores: phosh (default, shell mobile) +
+    # weston (alternativa minimalista). Decisao de qual usar e via
+    # systemctl enable/disable. Default no overlay e phosh.
+    arch-chroot "$MNT" pacman -Sy --noconfirm --needed \
+        phoc phosh squeekboard \
+        weston \
+        seatd libdisplay-info \
+        xorg-xwayland mesa mesa-utils mesa-demos \
+        ttf-dejavu noto-fonts \
+        || die "pacman -S do stack desktop falhou"
+    arch-chroot "$MNT" systemctl enable seatd.service >/dev/null
 fi
 
 # Expansao do filesystem na primeira boot. A imagem ext4 e gerada com 3 GiB
@@ -214,20 +296,16 @@ ln -sf /usr/lib/systemd/system/sshd.service \
 # Firmware proprietario (Wi-Fi pronto + iris cal). Sem isso o
 # remoteproc do wcnss falha em carregar e o wcn36xx nao traz iface up.
 # Use scripts/09-extract-firmware.sh pra extrair do flashfile stock.
-if [ -d "$REPO/firmware" ] && ls "$REPO/firmware"/wcnss.* >/dev/null 2>&1; then
-    msg "instalando firmware Wi-Fi (wcnss) no rootfs..."
-    mkdir -p "$MNT/lib/firmware/wlan/prima"
-    cp -v "$REPO/firmware"/wcnss.* "$MNT/lib/firmware/" | tail -3
-    if [ -f "$REPO/firmware/wlan/prima/WCNSS_qcom_wlan_nv.bin" ]; then
-        cp "$REPO/firmware/wlan/prima/WCNSS_qcom_wlan_nv.bin" \
-            "$MNT/lib/firmware/wlan/prima/"
-    else
-        warn "WCNSS_qcom_wlan_nv.bin ausente — Wi-Fi nao vai funcionar"
-        warn "Extrai-lo de /persist do device. Veja docs/."
-    fi
+check_wcnss_firmware
+msg "instalando firmware Wi-Fi (wcnss) no rootfs..."
+mkdir -p "$MNT/lib/firmware/wlan/prima"
+cp -v "$REPO/firmware"/wcnss.* "$MNT/lib/firmware/" | tail -3
+if [ -f "$REPO/firmware/wlan/prima/WCNSS_qcom_wlan_nv.bin" ]; then
+    cp "$REPO/firmware/wlan/prima/WCNSS_qcom_wlan_nv.bin" \
+        "$MNT/lib/firmware/wlan/prima/"
 else
-    warn "diretorio firmware/ vazio — Wi-Fi nao funcionara"
-    warn "Rode scripts/09-extract-firmware.sh para populá-lo"
+    warn "WCNSS_qcom_wlan_nv.bin ausente — Wi-Fi nao vai funcionar"
+    warn "Extrai-lo de /persist do device. Veja docs/."
 fi
 
 # Keepalive do link USB: ping no host (10.42.0.1) a cada 60s.

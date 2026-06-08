@@ -298,3 +298,167 @@ sudo nmcli connection up sanders-ecm
 
 Com isso o NM aplica o IP automaticamente toda vez que a interface
 aparece, e o `08-host-net.sh` só precisa cuidar de NAT/forward.
+
+## 17. WCNSS falha com `error -22 initializing firmware wcnss.mdt`
+
+**Sintoma:**
+```
+remoteproc0: Booting fw image wcnss.mdt, size 7324
+qcom-wcnss-pil a204000.remoteproc: error -22 initializing firmware wcnss.mdt
+remoteproc0: Failed to load program segments: -22
+```
+
+**Causa:** no `msm8953.dtsi`, a memoria reservada do WCNSS estava em
+`0x8e700000`, mas o firmware stock do sanders carrega o primeiro segmento
+em `0x8e600000`. Mover WCNSS para `0x8e600000` tambem exige encurtar a
+regiao ADSP adjacente de `0x1100000` para `0x1000000`, senao as regioes
+ficam sobrepostas.
+
+**Fix:** `kernel/0003-msm8953-fix-wcnss-reserved-mem-base-address.patch`.
+Com ele, o boot mostra:
+```
+adsp@8d600000  0x8d600000..0x8e5fffff
+wcnss@8e600000 0x8e600000..0x8ecfffff
+remoteproc0: remote processor a204000.remoteproc is now up
+```
+
+Se o initramfs/rootfs ainda tiver firmware errado, copie os blobs stock da
+particao `modem` em runtime:
+```bash
+mount -o ro /dev/disk/by-partlabel/modem /mnt/modem
+cp -v /mnt/modem/image/wcnss.mdt /mnt/modem/image/wcnss.b* /lib/firmware/
+echo stop  > /sys/class/remoteproc/remoteproc0/state 2>/dev/null || true
+echo start > /sys/class/remoteproc/remoteproc0/state
+```
+
+## 18. `wpa_supplicant` nao inicia: `libpcsclite.so.1` ausente
+
+**Sintoma:**
+```
+wpa_supplicant: error while loading shared libraries: libpcsclite.so.1:
+cannot open shared object file: No such file or directory
+```
+
+**Causa:** em hosts WSL sem `arch-chroot` funcional e sem `pacman` nativo,
+o build antigo avisava que a instalacao de pacotes tinha falhado, mas seguia
+gerando uma imagem sem dependencias runtime do `wpa_supplicant`.
+
+**Fix:** `scripts/05-build-rootfs.sh` agora trata o userspace Wi-Fi como
+critico. Se `arch-chroot`/`pacman` nao funcionarem, baixa e extrai direto
+os pacotes Arch Linux ARM `wpa_supplicant`, `iw`, `dhcpcd` e `pcsclite`.
+Validacao em imagem montada:
+```bash
+ls /usr/bin/wpa_supplicant /usr/bin/iw /usr/bin/dhcpcd /usr/lib/libpcsclite.so.1
+```
+
+## 19. Teste de controle com rede aberta 2.4 GHz `CASAA`
+
+**Objetivo:** com firmware stock do `modem` carregado e `wpa_supplicant`
+funcional, usar a rede 2.4 GHz aberta `CASAA` para separar falhas basais de
+`CONFIG_BSS`/`CONFIG_STA` de falhas especificas de WPA2. A rede 5 GHz
+`CASAA_5G` continua sendo o teste com senha.
+
+Se a rede aberta tambem cair com `MEM_FAIL=5`, o problema nao esta no PSK nem
+no 4-way handshake; esta antes, na configuracao BSS/STA enviada ao firmware.
+O sintoma esperado nesse caso e:
+```
+wlan0: RX AssocResp ... status=0
+wcn36xx: WARNING hal config bss response failure: 5
+wcn36xx: ERROR hal_config_bss response failed err=-5
+wcn36xx: WARNING hal config sta response failure: 5
+wcn36xx: ERROR hal_config_sta response failed err=-5
+wlan0: associated
+wlan0: deauthenticated ... (Reason: 15=4WAY_HANDSHAKE_TIMEOUT)
+```
+
+**Interpretacao:** `wpa_supplicant` pode sugerir senha incorreta depois de
+um timeout desses na `CASAA_5G`, mas isso nao deve ser aceito como causa se a
+rede aberta `CASAA` tambem mostrar `MEM_FAIL=5` no kernel.
+
+## 20. Diagnostico WCN36XX: `CONFIG_STA` com `bss_index=255`
+
+**Hipotese atual:** `vif_priv->bss_index` comeca em `0xff`
+(`WCN36XX_HAL_BSS_INVALID_IDX`). `wcn36xx_smd_set_sta_params()` copia esse
+valor para `sta_params->bssid_index`, e o indice so muda quando
+`CONFIG_BSS_RSP` retorna sucesso. Se `CONFIG_BSS_RSP` falha com
+`MEM_FAIL=5`, o driver pode tentar `CONFIG_STA` com `bssid_index=255`.
+
+O patch automatico `kernel/0004-wcn36xx-debug-bss-index.patch` adiciona
+logs de `CONFIG_BSS_REQ/RSP` e `CONFIG_STA_REQ/RSP`, dump curto das respostas
+em falha e a guarda:
+```
+refusing config_sta: invalid bss_index=255 self_sta_index=X
+```
+
+**Preparacao no device:**
+```bash
+pkill -f wpa_supplicant || true
+rm -f /run/wpa_supplicant/wlan0 /var/run/wpa_supplicant/wlan0
+ip link set wlan0 down
+ip addr flush dev wlan0
+ip link set wlan0 up
+echo 0x300 > /sys/module/wcn36xx/parameters/debug_mask
+dmesg -c >/dev/null
+```
+
+Em outro terminal no device, acompanhar:
+```bash
+dmesg -w | grep -E 'config bss|config sta|bss_index|sta_index|MEM_FAIL|TIMEOUT|associated|deauthenticated|refusing'
+```
+
+**Teste com rede aberta:**
+```bash
+cat >/tmp/wpa-open.conf <<'EOF'
+ctrl_interface=/run/wpa_supplicant
+update_config=0
+network={
+    ssid="CASAA"
+    key_mgmt=NONE
+}
+EOF
+
+wpa_supplicant -dd -i wlan0 -c /tmp/wpa-open.conf
+```
+
+**Teste WPA2 simples na 5 GHz:**
+```bash
+wpa_passphrase "CASAA_5G" "SENHA_DA_CASAA_5G" >/tmp/wpa2.conf
+wpa_supplicant -dd -i wlan0 -c /tmp/wpa2.conf
+```
+
+**Ordem dos testes:**
+1. Build normal com `./scripts/02-build-kernel.sh` e somente o patch
+   principal `0004`.
+2. Rede aberta `CASAA` em 2.4 GHz.
+3. WPA2 simples na `CASAA_5G`.
+4. Aplicar manualmente
+   `kernel/experiments/0005-wcn36xx-experiment-force-bss-index-zero.patch`.
+5. Voltar ao patch principal e aplicar manualmente
+   `kernel/experiments/0006-wcn36xx-experiment-legacy-no-ht.patch`.
+
+Os experimentos ficam em `kernel/experiments/` exatamente para nao serem
+aplicados pelo `scripts/02-build-kernel.sh`. Para aplicar um experimento:
+```bash
+cd build/linux
+git apply ../../kernel/experiments/0005-wcn36xx-experiment-force-bss-index-zero.patch
+cd ../..
+./scripts/02-build-kernel.sh
+```
+
+Para remover o experimento da arvore de teste:
+```bash
+cd build/linux
+git apply -R ../../kernel/experiments/0005-wcn36xx-experiment-force-bss-index-zero.patch
+```
+
+**Interpretacao:**
+- Se aparecer `refusing config_sta: invalid bss_index=255`, a guarda confirma
+  que o `CONFIG_STA` seria enviado com indice invalido.
+- Se o experimento `force-bss-index-zero` fizer WPA2 avancar, investigar
+  parsing/layout de `CONFIG_BSS_RSP`.
+- Se o experimento legado/sem HT mudar o erro, focar capacidades HT/VHT,
+  `nw_type`, 40 MHz e AMPDU.
+- Se rede aberta falhar igual, o problema e BSS/STA basal, nao chave WPA.
+
+Bluetooth nao faz parte deste diagnostico; nao alterar os servicos ou blobs
+de BT para esses testes.

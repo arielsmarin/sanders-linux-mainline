@@ -1,0 +1,42 @@
+From: Ariel Marin <arielsmarin@gmail.com>
+Date: Mon, 08 Jun 2026 00:00:00 +0000
+Subject: [PATCH 2/2] wifi: wcn36xx: send CONFIG_BSS before JOIN in STA mode
+
+The prima/qcacld vendor drivers send CONFIG_BSS (ADD) to the firmware
+before the JOIN command, establishing the BSS context before the radio
+is tuned to the AP channel.  Mainline wcn36xx does the opposite: JOIN
+first, then CONFIG_BSS.
+
+Mirror the vendor driver order by swapping the two calls.  This was
+observed to be required for correct operation on Motorola XT1802
+(WCN3680B, firmware 1.5.1.2) in combination with the VERSION0 header
+fix.
+
+Signed-off-by: Ariel Marin <arielsmarin@gmail.com>
+---
+ drivers/net/wireless/ath/wcn36xx/main.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/net/wireless/ath/wcn36xx/main.c b/drivers/net/wireless/ath/wcn36xx/main.c
+index c3f086087..85577f925 100644
+--- a/drivers/net/wireless/ath/wcn36xx/main.c
++++ b/drivers/net/wireless/ath/wcn36xx/main.c
+@@ -829,10 +829,13 @@ static void wcn36xx_bss_info_changed(struct ieee80211_hw *hw,
+ 			vif_priv->bss_index = WCN36XX_HAL_BSS_INVALID_IDX;
+ 			wcn36xx_smd_set_link_st(wcn, bss_conf->bssid, vif->addr,
+ 						WCN36XX_HAL_LINK_PREASSOC_STATE);
+-			wcn36xx_smd_join(wcn, bss_conf->bssid,
+-					 vif->addr, WCN36XX_HW_CHANNEL(wcn));
++			/* prima/qcacld driver sends CONFIG_BSS before JOIN.
++			 * Mirror that order: create the BSS context first,
++			 * then tune the radio to the AP channel via JOIN. */
+ 			wcn36xx_smd_config_bss(wcn, vif, NULL,
+ 					       bss_conf->bssid, false);
++			wcn36xx_smd_join(wcn, bss_conf->bssid,
++					 vif->addr, WCN36XX_HW_CHANNEL(wcn));
+ 		} else {
+ 			vif_priv->is_joining = false;
+ 			wcn36xx_smd_delete_bss(wcn, vif);
+
+--
+ 2.45.0
