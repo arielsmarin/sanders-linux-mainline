@@ -1,0 +1,15 @@
+[Unit]
+Description=Emergency UI (Weston sobre SimpleDRM)
+# NAO habilitado no boot — iniciar manualmente: systemctl start emergency-ui
+# Pré-requisito: pacman -S weston
+After=systemd-logind.service
+
+[Service]
+Type=simple
+ExecStartPre=/bin/sh -c 'command -v weston || (echo "Instale weston: pacman -S weston" && exit 1)'
+ExecStart=/usr/bin/weston --backend=drm
+Environment=WLR_RENDERER=pixman
+StandardInput=tty
+TTYPath=/dev/tty2
+Restart=on-failure
+RestartSec=5

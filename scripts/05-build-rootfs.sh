@@ -29,6 +29,7 @@ mkdir -p "$MNT"
 case "$FLAVOR" in
     headless) IMG_SIZE=3G ;;
     desktop)  IMG_SIZE=6G ;;
+    mini)     IMG_SIZE=2G ;;
 esac
 rm -f "$ROOTFS_IMG"
 msg "criando imagem ext4 $IMG_SIZE (FLAVOR=$FLAVOR) com LABEL=rootfs..."
@@ -149,10 +150,11 @@ EOF
         "$MNT/etc/systemd/system/multi-user.target.wants/pacman-keyring-init.service"
 fi
 
-# Samba: util pros dois flavors (compartilhar /home via Wi-Fi/USB).
-# Nao habilita servico — usuario decide com `systemctl enable smb nmb`.
-msg "instalando samba (sem habilitar smb/nmb)..."
-pacman_install samba || warn "samba nao instalado neste build (pacman/chroot indisponivel)"
+# Samba: util pros flavors headless/desktop. Mini nao inclui.
+if [ "$FLAVOR" != "mini" ]; then
+    msg "instalando samba (sem habilitar smb/nmb)..."
+    pacman_install samba || warn "samba nao instalado neste build (pacman/chroot indisponivel)"
+fi
 
 # Wi-Fi userspace: wpa_supplicant (WPA2/WPA3 4-way handshake),
 # iw (scan/management), dhcpcd (IP por DHCP). pcsclite fornece
@@ -163,6 +165,31 @@ if ! pacman_install wpa_supplicant iw dhcpcd pcsclite; then
     warn "pacman/chroot falhou para Wi-Fi; usando fallback direto ALARM"
     alarm_direct_install wpa_supplicant iw dhcpcd pcsclite \
         || die "falha instalando userspace Wi-Fi via fallback direto"
+fi
+
+if [ "$FLAVOR" = "mini" ]; then
+    if [ "$CHROOT_WORKS" != "1" ]; then
+        die "FLAVOR=mini requer arch-chroot + qemu-aarch64 funcionando no host"
+    fi
+    msg "instalando pacotes mini (nginx, nftables, evtest)..."
+    arch-chroot "$MNT" pacman -Sy --noconfirm --needed \
+        nginx nftables evtest \
+        || die "pacman -S do stack mini falhou"
+
+    msg "habilitando nginx e nftables..."
+    arch-chroot "$MNT" systemctl enable nginx.service >/dev/null
+    arch-chroot "$MNT" systemctl enable nftables.service >/dev/null
+    arch-chroot "$MNT" systemctl enable wpa_supplicant@wlan0.service >/dev/null
+
+    msg "baixando cloudflared arm64..."
+    CF_URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
+    CF_BIN="$MNT/usr/local/bin/cloudflared"
+    if curl -fsSL -o "$CF_BIN" "$CF_URL"; then
+        chmod +x "$CF_BIN"
+        msg "cloudflared instalado em /usr/local/bin/cloudflared"
+    else
+        warn "falha ao baixar cloudflared — instale manualmente depois"
+    fi
 fi
 
 if [ "$FLAVOR" = "desktop" ]; then

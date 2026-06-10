@@ -1,0 +1,75 @@
+#!/bin/sh
+# screen-toggle — alterna backlight ao pressionar o botão power.
+#
+# Lê eventos do dispositivo de entrada que expõe KEY_POWER (code 116).
+# No PM8953 isso é geralmente event0 (qpnp_pon / pm8953_pon/pwrkey).
+# Se o nome do device mudar, ajuste PWRKEY_DEV abaixo ou deixe em
+# auto-detect via /proc/bus/input/devices.
+
+BACKLIGHT=/sys/class/backlight/pmi8950_wled
+SAVED_BRIGHT=255
+
+# Resolve o nó de input do power button via /proc/bus/input/devices.
+# Procura device cujo Name contenha "pon" ou "pwrkey".
+find_pwrkey_dev() {
+    awk '
+        /^N: Name=.*[Pp](on|wer|wrkey)/ { found=1 }
+        /^H: Handlers=/ && found {
+            match($0, /event[0-9]+/)
+            if (RLENGTH > 0) { print "/dev/input/" substr($0, RSTART, RLENGTH); found=0 }
+        }
+        /^$/ { found=0 }
+    ' /proc/bus/input/devices 2>/dev/null | head -n1
+}
+
+DEV=$(find_pwrkey_dev)
+DEV="${DEV:-/dev/input/event0}"
+
+# Garante que backlight existe antes de tentar
+if [ ! -d "$BACKLIGHT" ]; then
+    echo "screen-toggle: $BACKLIGHT nao encontrado; abortando" >&2
+    exit 1
+fi
+
+MAX=$(cat "$BACKLIGHT/max_brightness" 2>/dev/null || echo 255)
+SAVED_BRIGHT=$MAX
+
+echo "screen-toggle: monitorando $DEV | backlight=$BACKLIGHT (max=$MAX)"
+
+# Cada input_event em aarch64 (64-bit) tem 24 bytes:
+#   8B tv_sec + 8B tv_usec + 2B type + 2B code + 4B value (little-endian)
+# EV_KEY=0x0001, KEY_POWER=0x0074 (116), value=1 (press)
+
+toggle() {
+    cur=$(cat "$BACKLIGHT/brightness" 2>/dev/null || echo 0)
+    if [ "$cur" -gt 0 ]; then
+        SAVED_BRIGHT=$cur
+        printf '%d\n' 0 > "$BACKLIGHT/brightness"
+    else
+        printf '%d\n' "$SAVED_BRIGHT" > "$BACKLIGHT/brightness"
+    fi
+}
+
+# Loop de leitura: extrai campos type/code/value de cada evento de 24 bytes.
+while true; do
+    # Lê 24 bytes e converte para hex sem espaços
+    hex=$(dd if="$DEV" bs=24 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n')
+    [ ${#hex} -lt 48 ] && continue
+
+    # Bytes 16-17 (offset 32): type (LE u16)
+    t_lo="${hex:32:2}" t_hi="${hex:34:2}"
+    type=$(printf '%d' "0x${t_hi}${t_lo}")
+
+    # Bytes 18-19 (offset 36): code (LE u16)
+    c_lo="${hex:36:2}" c_hi="${hex:38:2}"
+    code=$(printf '%d' "0x${c_hi}${c_lo}")
+
+    # Bytes 20-21 (offset 40): value low (apenas os 2 bytes baixos, suficiente)
+    v_lo="${hex:40:2}" v_hi="${hex:42:2}"
+    val=$(printf '%d' "0x${v_hi}${v_lo}")
+
+    # EV_KEY=1, KEY_POWER=116, value=1 (press)
+    if [ "$type" = "1" ] && [ "$code" = "116" ] && [ "$val" = "1" ]; then
+        toggle
+    fi
+done

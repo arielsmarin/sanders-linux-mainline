@@ -51,6 +51,11 @@ fi
 
 msg "aplicando config fragment do sanders..."
 ./scripts/kconfig/merge_config.sh -m .config "$REPO/kernel/sanders.config.fragment"
+# mini: aplica overlay de configs minimalistas (remove BT/IIO/audio/media)
+if [ "${FLAVOR:-headless}" = "mini" ]; then
+    msg "aplicando config fragment mini (overlay sanders-mini.config.fragment)..."
+    ./scripts/kconfig/merge_config.sh -m .config "$REPO/kernel/sanders-mini.config.fragment"
+fi
 make ARCH=arm64 CROSS_COMPILE="$ARM64_TC" olddefconfig
 
 msg "compilando kernel (Image.gz + dtbs)..."

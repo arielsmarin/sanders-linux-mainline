@@ -22,8 +22,8 @@ ARCH_TARBALL="$BUILD/ArchLinuxARM-aarch64-latest.tar.gz"
 # identicos entre os dois; so muda o userspace no rootfs.
 FLAVOR="${FLAVOR:-headless}"
 case "$FLAVOR" in
-    headless|desktop) ;;
-    *) echo "FLAVOR invalido: $FLAVOR (use headless|desktop)" >&2; exit 1 ;;
+    headless|desktop|mini) ;;
+    *) echo "FLAVOR invalido: $FLAVOR (use headless|desktop|mini)" >&2; exit 1 ;;
 esac
 ROOTFS_IMG="$BUILD/rootfs-arch-$FLAVOR.img"
 
@@ -48,6 +48,10 @@ BOOT_PAGESIZE="2048"
 
 # Cmdline
 KERNEL_CMDLINE="console=tty0 console=ttyGS0 console=ttyMSM0,115200n8 earlycon ignore_loglevel printk.time=1 printk.devkmsg=on panic=30 fbcon=font:TER16x32"
+# mini: apaga tela após 60 s de inatividade no console (consoleblank=N em segundos).
+if [ "${FLAVOR}" = "mini" ]; then
+    KERNEL_CMDLINE="$KERNEL_CMDLINE consoleblank=60"
+fi
 
 mkdir -p "$BUILD" "$OUT"
 

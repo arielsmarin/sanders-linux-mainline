@@ -1,0 +1,63 @@
+# Config fragment "mini" para o port sanders — overlay sobre sanders.config.fragment.
+# Aplicado DEPOIS do fragment base quando FLAVOR=mini.
+#
+# Objetivo: kernel headless mínimo para servidor (Wi-Fi, USB, input, DRM/backlight).
+# Remove: Bluetooth, sensores IIO, debug pesado.
+# Desabilita explicitamente: áudio, media/câmera, NFC, Wi-Fi de outros vendors.
+# Adiciona: driver power key PMIC (para screen-toggle).
+
+# --- Remover Bluetooth ---
+# O canal SMD do wcnss ainda sobe (Wi-Fi precisa), mas btqcomsmd não carrega.
+CONFIG_BT=n
+
+# --- Remover sensores IIO ---
+CONFIG_IIO=n
+CONFIG_LTR501=n
+
+# --- Remover debug do wcn36xx ---
+CONFIG_WCN36XX_DEBUG=n
+
+# --- Desabilitar áudio ---
+# SND em =n evita que toda a cascata ASoC/ALSA seja compilada.
+CONFIG_SOUND=n
+
+# --- Desabilitar media/V4L2/câmera ---
+CONFIG_MEDIA_SUPPORT=n
+CONFIG_VIDEO_DEV=n
+
+# --- Desabilitar NFC ---
+CONFIG_NFC=n
+
+# --- Desabilitar Wi-Fi vendors desnecessários ---
+# Mantém apenas ATH (WCN36XX usa WLAN_VENDOR_ATH). Desabilita os demais
+# para reduzir tempo de compilação e tamanho do kernel.
+CONFIG_WLAN_VENDOR_ADMTEK=n
+CONFIG_WLAN_VENDOR_AIROHA=n
+CONFIG_WLAN_VENDOR_ATMEL=n
+CONFIG_WLAN_VENDOR_BROADCOM=n
+CONFIG_WLAN_VENDOR_CISCO=n
+CONFIG_WLAN_VENDOR_INTEL=n
+CONFIG_WLAN_VENDOR_INTERSIL=n
+CONFIG_WLAN_VENDOR_MARVELL=n
+CONFIG_WLAN_VENDOR_MEDIATEK=n
+CONFIG_WLAN_VENDOR_MICROCHIP=n
+CONFIG_WLAN_VENDOR_PURELIFI=n
+CONFIG_WLAN_VENDOR_RALINK=n
+CONFIG_WLAN_VENDOR_REALTEK=n
+CONFIG_WLAN_VENDOR_RSI=n
+CONFIG_WLAN_VENDOR_SILABS=n
+CONFIG_WLAN_VENDOR_ST=n
+CONFIG_WLAN_VENDOR_TI=n
+CONFIG_WLAN_VENDOR_ZYDAS=n
+CONFIG_WLAN_VENDOR_QUANTENNA=n
+
+# --- Power key PMIC (pm8953 pon/pwrkey → KEY_POWER) ---
+# Driver: drivers/input/misc/qpnp-power-on.c ou pm8941-pwrkey.c.
+# Necessário para screen-toggle reagir ao botão físico de power.
+CONFIG_INPUT_PMIC_PONKEY=y
+
+# --- Backlight QCOM WLED (pmi8950_wled) ---
+# Controlador de backlight do display. Expõe
+# /sys/class/backlight/pmi8950_wled/brightness para o screen-toggle.
+CONFIG_BACKLIGHT_CLASS_DEVICE=y
+CONFIG_BACKLIGHT_QCOM_WLED=y

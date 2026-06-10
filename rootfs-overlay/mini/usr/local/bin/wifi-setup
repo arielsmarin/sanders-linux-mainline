@@ -1,0 +1,65 @@
+#!/bin/sh
+# wifi-setup — configura a conexão Wi-Fi do sanders-mini.
+#
+# Uso:
+#   wifi-setup <SSID> <senha>     # WPA2
+#   wifi-setup <SSID>             # rede aberta
+#   wifi-setup --scan             # lista redes visíveis
+#   wifi-setup --status           # mostra conexão atual
+
+CONF=/etc/wpa_supplicant/wpa_supplicant-wlan0.conf
+WPA_SVC=wpa_supplicant@wlan0.service
+
+case "$1" in
+    --scan)
+        echo "Aguardando wlan0 subir..."
+        iw dev wlan0 scan 2>/dev/null \
+            | awk '/^BSS /{ bss=$2 } /SSID:/{ printf "%s  %s\n", bss, $2 }' \
+            | sort -u
+        ;;
+
+    --status)
+        echo "=== wpa_supplicant ==="
+        wpa_cli -i wlan0 status 2>/dev/null || echo "(wpa_supplicant nao esta rodando)"
+        echo ""
+        echo "=== IP ==="
+        ip addr show wlan0 2>/dev/null | grep -E 'inet |state'
+        ;;
+
+    "")
+        echo "Uso: wifi-setup <SSID> [<senha>]"
+        echo "     wifi-setup --scan"
+        echo "     wifi-setup --status"
+        exit 1
+        ;;
+
+    *)
+        SSID="$1"
+        PASS="$2"
+
+        if [ -n "$PASS" ]; then
+            NETBLOCK=$(wpa_passphrase "$SSID" "$PASS" 2>/dev/null | grep -v '#')
+            if [ -z "$NETBLOCK" ]; then
+                echo "Erro: wpa_passphrase falhou (wpa_supplicant instalado?)" >&2
+                exit 1
+            fi
+        else
+            NETBLOCK="network={
+    ssid=\"$SSID\"
+    key_mgmt=NONE
+}"
+        fi
+
+        cat > "$CONF" <<EOF
+ctrl_interface=/run/wpa_supplicant
+ctrl_interface_group=0
+update_config=1
+
+$NETBLOCK
+EOF
+
+        echo "Configurado: $CONF"
+        echo "Reiniciando $WPA_SVC..."
+        systemctl restart "$WPA_SVC" && echo "OK — aguarde alguns segundos e cheque: wifi-setup --status"
+        ;;
+esac

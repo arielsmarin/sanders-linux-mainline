@@ -40,13 +40,19 @@ chmod +x "$INITRAMFS_ROOT/init"
 # Firmware embutido no initramfs. Necessario porque drivers builtin
 # (wcnss-pil etc) chamam request_firmware na init dos drivers, MUITO
 # antes do switch_root para o rootfs. Sem isso, "wcnss.mdt failed: -2".
-check_wcnss_firmware
-msg "incorporando firmware no initramfs..."
-mkdir -p "$INITRAMFS_ROOT/lib/firmware/wlan/prima"
-cp "$REPO/firmware"/wcnss.* "$INITRAMFS_ROOT/lib/firmware/"
-if [ -f "$REPO/firmware/wlan/prima/WCNSS_qcom_wlan_nv.bin" ]; then
-    cp "$REPO/firmware/wlan/prima/WCNSS_qcom_wlan_nv.bin" \
-        "$INITRAMFS_ROOT/lib/firmware/wlan/prima/"
+# SKIP_WCNSS_FW=1 — bootstrap sem firmware (kernel boota, Wi-Fi não funciona).
+if [ "${SKIP_WCNSS_FW:-0}" = "1" ]; then
+    warn "SKIP_WCNSS_FW=1: initramfs sem firmware wcnss (boot bootstrap apenas)"
+    mkdir -p "$INITRAMFS_ROOT/lib/firmware/wlan/prima"
+else
+    check_wcnss_firmware
+    msg "incorporando firmware no initramfs..."
+    mkdir -p "$INITRAMFS_ROOT/lib/firmware/wlan/prima"
+    cp "$REPO/firmware"/wcnss.* "$INITRAMFS_ROOT/lib/firmware/"
+    if [ -f "$REPO/firmware/wlan/prima/WCNSS_qcom_wlan_nv.bin" ]; then
+        cp "$REPO/firmware/wlan/prima/WCNSS_qcom_wlan_nv.bin" \
+            "$INITRAMFS_ROOT/lib/firmware/wlan/prima/"
+    fi
 fi
 
 msg "compactando em $OUT/initramfs.cpio.gz..."

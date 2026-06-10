@@ -37,9 +37,9 @@ firmware/
 firmware-sanders-orig/
 
 # Claude Code / agentes internos
-.agents/
-skills-lock.json
-CLAUDE.md
+# .agents/
+# skills-lock.json
+# CLAUDE.md
 
 # Python bytecode
 **/__pycache__/
