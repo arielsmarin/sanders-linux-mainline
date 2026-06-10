@@ -331,8 +331,7 @@ if [ -f "$REPO/firmware/wlan/prima/WCNSS_qcom_wlan_nv.bin" ]; then
     cp "$REPO/firmware/wlan/prima/WCNSS_qcom_wlan_nv.bin" \
         "$MNT/lib/firmware/wlan/prima/"
 else
-    warn "WCNSS_qcom_wlan_nv.bin ausente — Wi-Fi nao vai funcionar"
-    warn "Extrai-lo de /persist do device. Veja docs/."
+    warn "WCNSS_qcom_wlan_nv.bin ausente — regulatorio WCNSS padrao (pode funcionar)"
 fi
 
 # Keepalive do link USB: ping no host (10.42.0.1) a cada 60s.
@@ -380,6 +379,21 @@ done
 # autologin pra evitar conflito (weston.service tem Conflicts=getty@tty1).
 if [ "$FLAVOR" = "desktop" ]; then
     rm -rf "$MNT/etc/systemd/system/getty@tty1.service.d"
+fi
+
+# Kernel artifacts for lk2nd extlinux auto-boot: lk2nd scans partitions for
+# /extlinux/extlinux.conf and loads kernel/dtb/initramfs from /boot/.
+msg "instalando kernel/DTB/initramfs em /boot/ (extlinux auto-boot)..."
+mkdir -p "$MNT/boot"
+KERNEL_IMAGE="$LINUX_SRC/arch/arm64/boot/Image.gz"
+DTB_FILE="$LINUX_SRC/arch/arm64/boot/dts/qcom/msm8953-motorola-sanders.dtb"
+if [ -f "$KERNEL_IMAGE" ] && [ -f "$DTB_FILE" ]; then
+    cp "$KERNEL_IMAGE" "$MNT/boot/Image.gz"
+    cp "$DTB_FILE" "$MNT/boot/msm8953-motorola-sanders.dtb"
+    cp "$OUT/initramfs.cpio.gz" "$MNT/boot/initramfs.cpio.gz"
+    msg "kernel/DTB/initramfs copiados para /boot/"
+else
+    warn "kernel ou DTB ausente — extlinux auto-boot nao configurado"
 fi
 
 sync
