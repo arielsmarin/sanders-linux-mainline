@@ -29,7 +29,7 @@ mkdir -p "$MNT"
 case "$FLAVOR" in
     headless) IMG_SIZE=3G ;;
     desktop)  IMG_SIZE=6G ;;
-    mini)     IMG_SIZE=2G ;;
+    mini)     IMG_SIZE=4G ;;
 esac
 rm -f "$ROOTFS_IMG"
 msg "criando imagem ext4 $IMG_SIZE (FLAVOR=$FLAVOR) com LABEL=rootfs..."
@@ -38,7 +38,15 @@ mkfs.ext4 -L rootfs -F "$ROOTFS_IMG" >/dev/null
 
 msg "extraindo Arch Linux ARM tarball..."
 mount -o loop "$ROOTFS_IMG" "$MNT"
-bsdtar -xpf "$ARCH_TARBALL" -C "$MNT"
+# bsdtar -p falha no WSL2 com entradas de grupo inexistente e xattr.
+# GNU tar com --no-same-permissions evita esses erros e cria dirs intermediários.
+tar -xzf "$ARCH_TARBALL" -C "$MNT" --no-same-permissions 2>/dev/null || true
+
+# O tarball Arch ARM inclui kernel genérico aarch64 em /boot (~350MB) que não
+# usamos — nosso kernel vai para /boot/ mais tarde. Remove para liberar espaço.
+msg "removendo kernel genérico Arch ARM de /boot (não usado)..."
+rm -f "$MNT/boot/Image" "$MNT/boot/Image.gz" \
+      "$MNT/boot/initramfs-linux.img" "$MNT/boot/initramfs-linux-fallback.img" || true
 
 # Verifica se arch-chroot + qemu-aarch64 funcionam de verdade (nao so existem).
 # No WSL o binfmt pode estar registrado mas o flag F (fix-binary) ausente, fazendo
@@ -53,6 +61,11 @@ if command -v arch-chroot >/dev/null && [ -f /proc/sys/fs/binfmt_misc/qemu-aarch
     # Teste real: tenta executar /bin/true do rootfs aarch64
     if arch-chroot "$MNT" /bin/true 2>/dev/null; then
         CHROOT_WORKS=1
+        # Pacman 7.x requer Landlock LSM que o WSL2 não tem. Desabilita sandbox
+        # para todos os pacman calls no chroot.
+        if [ -f "$MNT/etc/pacman.conf" ]; then
+            sed -i '/^\[options\]/a DisableSandbox' "$MNT/etc/pacman.conf"
+        fi
     fi
 fi
 
@@ -101,8 +114,9 @@ pacman_install() {
         warn "arch-chroot indisponivel — instalando via pacman --root (sem scripts pos-install)"
         local tmpconf
         tmpconf=$(mktemp)
-        # Usa config do target mas sobrepoe SigLevel pois o keyring ainda nao foi init
-        sed 's/^SigLevel.*/SigLevel = Never/' "$MNT/etc/pacman.conf" > "$tmpconf"
+        # Usa config do target mas sobrepoe SigLevel e desativa sandbox (WSL2 sem Landlock)
+        sed -e 's/^SigLevel.*/SigLevel = Never/' \
+            -e '/^\[options\]/a DisableSandbox' "$MNT/etc/pacman.conf" > "$tmpconf"
         pacman --root "$MNT" --dbpath "$MNT/var/lib/pacman" \
             --config "$tmpconf" --cachedir /tmp/pacman-cache-arm \
             --noscriptlet --noconfirm --needed -Sy $pkgs

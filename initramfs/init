@@ -148,7 +148,35 @@ fi
 echo "[init] *** modo proof-of-life: sem rootfs, mas /dev/ttyACM0 disponivel ***"
 echo "[init] partlabel: $(ls /dev/disk/by-partlabel 2>/dev/null)"
 echo "[init] mmcblk:    $(ls /dev/mmcblk* 2>/dev/null)"
-# Sem rootfs: ai sim expoe shell no ttyGS0 (nao havera systemd pra fazer isso)
+
+# Pet PMIC watchdog a cada 15s para o dispositivo nao reiniciar
+/bin/sh -c '
+    for wdt in /dev/watchdog /dev/watchdog0; do
+        if [ -e "$wdt" ]; then
+            while true; do /bin/echo 1 > "$wdt" 2>/dev/null; /bin/sleep 15; done &
+            break
+        fi
+    done
+' &
+
+# Configura USB CDC ECM com IP estatico para instalacao via rede
+/bin/ip link set usb0 up 2>/dev/null
+/bin/ip addr add 10.42.0.2/24 dev usb0 2>/dev/null
+/bin/ip route add default via 10.42.0.1 dev usb0 2>/dev/null
+
+# Userdata: mostra qual particao usar para instalar rootfs
+echo "[init] === PARTICOES DISPONIVEIS ==="
+for p in /dev/mmcblk0p*; do
+    N=$(/bin/basename "$p")
+    SZ=$(/bin/cat "/sys/block/mmcblk0/$N/size" 2>/dev/null)
+    /bin/echo "  $p  ${SZ} sectors"
+done
+echo "[init] === Para instalar rootfs: ==="
+echo "[init]   wget -O /dev/mmcblk0p<N> http://10.42.0.1:8080/rootfs.img"
+echo "[init]   (onde N = particao userdata — geralmente a maior)"
+echo "[init] === IP deste dispositivo: 10.42.0.2 ==="
+
+# Sem rootfs: expoe shell no ttyGS0 (nao havera systemd pra fazer isso)
 if [ -c /dev/ttyGS0 ]; then
     /bin/setsid /bin/sh -c '
         while true; do
