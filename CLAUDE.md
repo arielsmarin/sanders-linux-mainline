@@ -54,19 +54,18 @@ Arch Linux ARM na eMMC (p54) com **SSH por chave**:
 
 ## ✅ MINI-SERVIDOR HTTPS + storage — no ar (2026-06-14)
 
-Objetivo: transformar o sanders em mini-servidor web HTTPS + storage. Provedor
-sob **CGNAT** (sem IP público) → **Cloudflare Tunnel** (outbound, fura CGNAT).
-Stack: **nginx** (web + reverse_proxy) + **cloudflared** (túnel) + **filebrowser**
-(storage, config pendente). `caddy` instalado mas ocioso (TLS termina na borda CF,
-basta UM servidor HTTP local). Detalhes completos: `docs/MINI_SERVER.md`.
+Objetivo: transformar o sanders em mini-servidor web HTTPS + storage.
+Stack: **nginx** (web + reverse_proxy + dashboard `/api/status`) + **filebrowser**
+(storage, config pendente). `caddy` instalado mas ocioso (basta UM servidor HTTP
+local). Setup genérico: `docs/MINI_SERVER.md`. A exposição pública deste deployment
+(domínio próprio + acesso remoto sob CGNAT via Cloudflare Tunnel/Access) está em
+`docs/PIPELINE_STRATYCONFIG_CGNAT.md` (NÃO duplicar specifics do domínio aqui).
 
-- **Público:** `https://cloudflared.stratyconfig.com` — `/` = página estática
-  (`/srv/www/sanders/index.html`), `/api/` = backend demo Python (:3000).
-- Serviços enabled (sobrevivem reboot): `nginx`, `sanders-demo-backend`,
-  `cloudflared` (criado por `cloudflared service install <TOKEN>` — fluxo dashboard;
-  hostname/rota ficam no painel Cloudflare, não em config.yml local).
-- Túnel via DASHBOARD (token), não CLI. **Token é credencial** — nunca em log.
-- Boot agora limpo: `is-system-running` = running, 0 failed (limpeza de
+- Serviços enabled (sobrevivem reboot): `nginx`, `sanders-demo-backend` (:3000),
+  `cloudflared` (túnel — ver pipeline doc).
+- `index.html` = dashboard de status lendo `/api/status` (CPU/RAM/disco/proc/wifi/
+  internet; bateria e cpufreq indisponíveis no mainline). Device é headless.
+- Boot limpo: `is-system-running` = running, 0 failed (limpeza de
   usb-keepalive.timer, wait-online só-wlan0, bt-mac não-fatal).
 
 ### Gotchas resolvidos no bring-up do servidor
@@ -81,7 +80,7 @@ basta UM servidor HTTP local). Detalhes completos: `docs/MINI_SERVER.md`.
 ### 🔜 Próximo: filebrowser (storage)
 Binário em `/usr/local/bin/filebrowser` (v2.63.15). Falta: diretório de dados,
 admin, unit systemd, expor atrás do nginx (path `/files/` ou subdomínio próprio
-no túnel, ex. `files.stratyconfig.com`).
+no túnel).
 
 ---
 

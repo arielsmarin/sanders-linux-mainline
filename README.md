@@ -10,10 +10,10 @@ o kernel Linux mainline upstream. Não há porte oficial em
 > ✅ **Estado: mini-servidor headless via Wi-Fi, no ar na internet.** Arch
 > Linux ARM persistente na eMMC → **Wi-Fi nativo (WCN3680B) associando WPA2 +
 > DHCP** → **SSH por chave via Wi-Fi** (`ssh -i ~/.ssh/id_ed25519 root@<ip>`)
-> → **nginx + cloudflared** servindo `https://cloudflared.stratyconfig.com`
-> com HTTPS público **mesmo atrás de CGNAT** (túnel outbound). Bluetooth
-> (WCN3680B) também funcional. Pendências: storage (filebrowser) a configurar,
-> boot standalone (extlinux), áudio, painel real.
+> → **nginx + dashboard de status**, com HTTPS público **mesmo atrás de CGNAT**
+> via Cloudflare Tunnel. Bluetooth (WCN3680B) também funcional. Pendências:
+> storage (filebrowser) a configurar, boot standalone (extlinux), áudio, painel
+> real.
 > Veja [`docs/HARDWARE_STATUS.md`](docs/HARDWARE_STATUS.md) e
 > [`docs/MINI_SERVER.md`](docs/MINI_SERVER.md).
 
@@ -94,7 +94,8 @@ scripts que automatizam tudo.
 ├── docs/
 │   ├── STEP_BY_STEP.md         # cada etapa, o que faz e o que esperar
 │   ├── HARDWARE_STATUS.md      # o que funciona e o que ainda não
-│   ├── MINI_SERVER.md          # nginx + cloudflared + filebrowser (uso atual)
+│   ├── MINI_SERVER.md          # mini-servidor padrão (nginx + backend + dashboard)
+│   ├── PIPELINE_STRATYCONFIG_CGNAT.md  # acesso remoto sob CGNAT (deployment próprio)
 │   ├── DEPLOY_FINAL_ARCH_MINI.md  # deploy na eMMC + standalone
 │   ├── LK2ND_SETUP.md          # bootloader (pré-requisito)
 │   ├── TROUBLESHOOTING.md      # erros que encontramos e como resolvemos
@@ -135,10 +136,11 @@ Build artifacts vão para `build/` e `build/out/` (gitignored).
 - **SSH por chave via Wi-Fi** — `ssh -i ~/.ssh/id_ed25519 root@<ip-wifi>`
   (DHCP). sshd + systemd-networkd + wpa_supplicant@wlan0 habilitados.
 - **Mini-servidor HTTPS + storage** rodando e **público na internet**:
-  `nginx` (web + reverse_proxy) atrás de `cloudflared` (Cloudflare Tunnel,
-  outbound — funciona **mesmo sob CGNAT**, sem IP público/port-forward).
-  Live em `https://cloudflared.stratyconfig.com`. Veja
-  [`docs/MINI_SERVER.md`](docs/MINI_SERVER.md).
+  `nginx` (web + reverse_proxy + dashboard de status) exposto via Cloudflare
+  Tunnel (outbound — funciona **mesmo sob CGNAT**, sem IP público/port-forward).
+  Setup genérico em [`docs/MINI_SERVER.md`](docs/MINI_SERVER.md); o deployment
+  específico (domínio + acesso remoto) em
+  [`docs/PIPELINE_STRATYCONFIG_CGNAT.md`](docs/PIPELINE_STRATYCONFIG_CGNAT.md).
 - **Bluetooth WCN3680B** — `btqcomsmd` sobe limpo, `hci0` ativo (BR/EDR + BLE),
   MAC de fábrica restaurado de `/persist` (pareamento persiste entre boots).
 - **Boot limpo** — `systemctl is-system-running` = `running` (0 unidades falhas).
