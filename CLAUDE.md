@@ -52,6 +52,39 @@ Arch Linux ARM na eMMC (p54) com **SSH por chave**:
 
 ---
 
+## ✅ MINI-SERVIDOR HTTPS + storage — no ar (2026-06-14)
+
+Objetivo: transformar o sanders em mini-servidor web HTTPS + storage. Provedor
+sob **CGNAT** (sem IP público) → **Cloudflare Tunnel** (outbound, fura CGNAT).
+Stack: **nginx** (web + reverse_proxy) + **cloudflared** (túnel) + **filebrowser**
+(storage, config pendente). `caddy` instalado mas ocioso (TLS termina na borda CF,
+basta UM servidor HTTP local). Detalhes completos: `docs/MINI_SERVER.md`.
+
+- **Público:** `https://cloudflared.stratyconfig.com` — `/` = página estática
+  (`/srv/www/sanders/index.html`), `/api/` = backend demo Python (:3000).
+- Serviços enabled (sobrevivem reboot): `nginx`, `sanders-demo-backend`,
+  `cloudflared` (criado por `cloudflared service install <TOKEN>` — fluxo dashboard;
+  hostname/rota ficam no painel Cloudflare, não em config.yml local).
+- Túnel via DASHBOARD (token), não CLI. **Token é credencial** — nunca em log.
+- Boot agora limpo: `is-system-running` = running, 0 failed (limpeza de
+  usb-keepalive.timer, wait-online só-wlan0, bt-mac não-fatal).
+
+### Gotchas resolvidos no bring-up do servidor
+- **Egress IPv4 morto:** `10-usb0.network` tinha `Gateway=`+rota default; com usb0
+  `linkdown` o kernel jogava toda saída no buraco (não ignora rota linkdown por
+  padrão). Removido Gateway/[Route] do usb0 → default só via wlan0. Sem isso pacman
+  não baixa nada. (backup `.bak` no device)
+- **Posse rootfs:** `/ /etc /usr` vinham `owned by alarm` → quebrava hooks do pacman.
+  Corrigido p/ root:root. TODO build: extrair rootfs como root no 05-build-rootfs.
+- Python não vinha no rootfs → instalado `python`.
+
+### 🔜 Próximo: filebrowser (storage)
+Binário em `/usr/local/bin/filebrowser` (v2.63.15). Falta: diretório de dados,
+admin, unit systemd, expor atrás do nginx (path `/files/` ou subdomínio próprio
+no túnel, ex. `files.stratyconfig.com`).
+
+---
+
 ## Checkpoint mais recente — 2026-06-08
 
 ### ✅ Wi-Fi FUNCIONANDO
