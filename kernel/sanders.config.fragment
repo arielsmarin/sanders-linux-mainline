@@ -140,3 +140,7 @@ CONFIG_BT_BNEP=y
 CONFIG_IIO=y
 CONFIG_LTR501=y
 CONFIG_WCN36XX_DEBUG=y
+
+# Watchdog KPSS builtin — sem isso o bootloader-armed watchdog morde ~30s
+# apos cada boot Linux (CONFIG_QCOM_WDT=m nao e carregado no initramfs).
+CONFIG_QCOM_WDT=y
