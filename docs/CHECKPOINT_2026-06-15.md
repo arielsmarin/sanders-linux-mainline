@@ -35,12 +35,27 @@ Artefatos reais do device trazidos pro repo (config-as-code, **sem segredos**):
 - `MINI_SERVER.md` — pipeline padrão (genérico) do mini-servidor.
 - `PIPELINE_STRATYCONFIG_CGNAT.md` — deployment próprio (CGNAT + domínio + acesso remoto).
 - `HARDWARE_STATUS.md` — Wi-Fi/Bluetooth ✅; bateria/áudio/painel pendentes.
+- `BOOT_ARCH_MINI.md` — runbook correto de boot (lk2nd + Vol-Down) e plano de autonomia.
 
 ## Pendências conhecidas (precisam rebuild de kernel)
 - **Firewall**: netfilter modular sem módulos instalados → `nft`/`iptables` falham.
   Mitigado por Cloudflare Access. TODO: `NF_TABLES`/`NF_CONNTRACK` builtin.
 - **Bateria**: sem fuel-gauge/charger no mainline (PMI8950: `qpnp-fg`/`SMBCHG`).
   VADC (tensão/temp) seria possível com canal `VBAT_SNS` + driver builtin.
+  Roda 24/7 na tomada pelo power-path do PMIC (VBUS); sem leitura de carga.
+
+## Pendência: autonomia de boot (cold boot sem host) — Phase 3, NÃO testada
+Hoje todo reboot exige host (WSL) + Vol-Down: `fastboot boot` da Motorola não
+sobe o kernel (vibra/loop), só via fastboot do lk2nd. Para o `reboot` voltar
+sozinho ao Arch (runbook e detalhes em `BOOT_ARCH_MINI.md`):
+1. **`/extlinux/extlinux.conf` no rootfs** com caminhos certos — o template
+   `rootfs-overlay/mini/extlinux/extlinux.conf` aponta pra
+   `/boot/msm8953-motorola-sanders.dtb` + `initramfs.cpio.gz`, que **não
+   existem** no device (lá: `Image.gz`, `dtbs/`, `initramfs-linux.img`). Corrigir.
+   Risco zero (só arquivo no rootfs).
+2. **lk2nd persistente** via `fastboot flash lk2nd` (única flash permitida;
+   `fetch` de backup antes). Premissa não verificada: aboot Motorola faz
+   chainload da partição `lk2nd`. Reversível; não brica (boot intocado).
 
 ## Próxima fase
 **Driver de fuel gauge do PMI8950** — ver investigação a iniciar (downstream
