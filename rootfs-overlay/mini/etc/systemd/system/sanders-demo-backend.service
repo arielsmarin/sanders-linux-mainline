@@ -1,0 +1,15 @@
+[Unit]
+Description=Sanders demo backend (HTTP 127.0.0.1:3000)
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /usr/local/bin/sanders-demo-backend.py
+Restart=on-failure
+RestartSec=2
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target

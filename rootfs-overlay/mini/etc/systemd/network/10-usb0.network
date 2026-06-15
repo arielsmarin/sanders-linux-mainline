@@ -1,0 +1,11 @@
+[Match]
+MACAddress=02:55:44:33:22:11
+
+[Network]
+# usb0 eh rede de SERVICO (gadget host<->device), nao a saida primaria.
+# Sem Gateway/default-route aqui: a rota default via usb0 (linkdown)
+# blackholava toda a egress IPv4 mesmo sem carrier. wlan0 (DHCP) prove
+# o default real.
+Address=10.42.0.2/24
+ConfigureWithoutCarrier=yes
+LinkLocalAddressing=no

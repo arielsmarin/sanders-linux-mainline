@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sanders Mini — status</title>
+<style>
+  :root{--bg:#0b1020;--card:#121a33;--card2:#0f1730;--bd:#1f2a4d;--fg:#e6e9f0;
+        --mut:#8b97b8;--accent:#7cc4ff;--ok:#6ee7a8;--warn:#ffcf5c;--bad:#ff7a7a}
+  *{box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;
+       background:var(--bg);color:var(--fg)}
+  header{padding:1.2rem 1rem .6rem;max-width:1100px;margin:0 auto}
+  h1{margin:0;font-size:1.3rem}
+  h1 .dot{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;
+          background:var(--mut);margin-right:.5rem;vertical-align:middle}
+  .sub{color:var(--mut);font-size:.85rem;margin-top:.3rem;display:flex;gap:1rem;flex-wrap:wrap}
+  main{max-width:1100px;margin:0 auto;padding:1rem;display:grid;gap:1rem;
+       grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}
+  .card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:1rem}
+  .card h2{margin:0 0 .7rem;font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;
+           color:var(--mut);font-weight:600}
+  .big{font-size:2rem;font-weight:700;line-height:1}
+  .big small{font-size:.9rem;color:var(--mut);font-weight:400}
+  .bar{height:8px;border-radius:6px;background:var(--card2);overflow:hidden;margin:.7rem 0 .5rem}
+  .bar > i{display:block;height:100%;border-radius:6px;background:var(--accent);
+           transition:width .4s ease,background .4s}
+  .rows{font-size:.85rem;color:var(--mut)}
+  .rows div{display:flex;justify-content:space-between;padding:.15rem 0}
+  .rows b{color:var(--fg);font-weight:600}
+  .muted{color:var(--mut);font-size:.85rem}
+  footer{max-width:1100px;margin:0 auto;padding:0 1rem 2rem;color:var(--mut);font-size:.8rem}
+  code{background:var(--card2);padding:.1rem .4rem;border-radius:4px}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="dot" id="live"></span>🛰️ Sanders Mini <span id="host" class="muted"></span></h1>
+  <div class="sub">
+    <span>uptime: <b id="uptime">—</b></span>
+    <span>internet: <b id="net">—</b></span>
+    <span>atualizado: <b id="ts">—</b></span>
+    <span id="err" style="color:var(--bad)"></span>
+  </div>
+</header>
+<main id="grid">
+  <div class="card"><h2>CPU</h2>
+    <div class="big"><span id="cpu">—</span><small>%</small></div>
+    <div class="bar"><i id="cpubar" style="width:0"></i></div>
+    <div class="rows">
+      <div><span>cores</span><b id="cores">—</b></div>
+      <div><span>load (1/5/15m)</span><b id="load">—</b></div>
+      <div><span>temp CPU</span><b id="ctemp">—</b></div>
+      <div><span>temp GPU</span><b id="gtemp">—</b></div>
+    </div>
+  </div>
+  <div class="card"><h2>Memória</h2>
+    <div class="big"><span id="mem">—</span><small>%</small></div>
+    <div class="bar"><i id="membar" style="width:0"></i></div>
+    <div class="rows">
+      <div><span>usada</span><b id="memu">—</b></div>
+      <div><span>disponível</span><b id="mema">—</b></div>
+      <div><span>total</span><b id="memt">—</b></div>
+      <div><span>swap</span><b id="swap">—</b></div>
+    </div>
+  </div>
+  <div class="card"><h2>Armazenamento (/)</h2>
+    <div class="big"><span id="disk">—</span><small>%</small></div>
+    <div class="bar"><i id="diskbar" style="width:0"></i></div>
+    <div class="rows">
+      <div><span>usado</span><b id="du">—</b></div>
+      <div><span>livre</span><b id="df">—</b></div>
+      <div><span>total</span><b id="dt">—</b></div>
+    </div>
+  </div>
+  <div class="card"><h2>Wi-Fi</h2>
+    <div class="big"><span id="sig">—</span><small> dBm</small></div>
+    <div class="bar"><i id="sigbar" style="width:0"></i></div>
+    <div class="rows">
+      <div><span>SSID</span><b id="ssid">—</b></div>
+      <div><span>freq</span><b id="freq">—</b></div>
+      <div><span>RX / TX</span><b id="rate">—</b></div>
+      <div><span>IP</span><b id="ip">—</b></div>
+    </div>
+  </div>
+  <div class="card"><h2>Processos</h2>
+    <div class="big" id="procs">—</div>
+    <div class="rows"><div><span>rodando agora</span><b id="prun">—</b></div></div>
+  </div>
+  <div class="card"><h2>Bateria</h2>
+    <div class="big" id="bat">—</div>
+    <div class="rows"><div><span id="batnote" class="muted"></span></div></div>
+  </div>
+</main>
+<footer>
+  Atualiza a cada 3&nbsp;s · dados de <code>/api/status</code> ·
+  Arch Linux ARM · nginx + cloudflared · device sem display (este painel é o monitor)
+</footer>
+<script>
+const $=id=>document.getElementById(id);
+function col(p){return p<70?'var(--ok)':p<90?'var(--warn)':'var(--bad)';}
+function setBar(bar,val,pct){bar.style.width=Math.max(0,Math.min(100,pct))+'%';
+  bar.style.background=col(pct);}
+function fmtUp(s){const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),
+  m=Math.floor(s%3600/60);return (d?d+'d ':'')+(h?h+'h ':'')+m+'m';}
+async function tick(){
+  try{
+    const r=await fetch('/api/status',{cache:'no-store'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const d=await r.json();
+    $('err').textContent='';
+    $('live').style.background='var(--ok)';
+    $('host').textContent=d.hostname||'';
+    $('uptime').textContent=fmtUp(d.uptime_seconds||0);
+    $('ts').textContent=new Date(d.time).toLocaleTimeString();
+    // internet
+    const net=d.internet||{};
+    $('net').textContent=net.online?('online · '+net.latency_ms+' ms'):'offline';
+    $('net').style.color=net.online?'var(--ok)':'var(--bad)';
+    // cpu
+    const c=d.cpu||{};
+    $('cpu').textContent=c.percent??'—'; setBar($('cpubar'),c.percent,c.percent||0);
+    $('cores').textContent=c.cores??'—';
+    $('load').textContent=(d.load||[]).map(x=>x.toFixed(2)).join(' / ')||'—';
+    $('ctemp').textContent=c.cpu_max_c!=null?c.cpu_max_c+' °C':'—';
+    $('gtemp').textContent=c.gpu_c!=null?c.gpu_c+' °C':'—';
+    // mem
+    const m=d.mem||{};
+    $('mem').textContent=m.percent??'—'; setBar($('membar'),m.percent,m.percent||0);
+    $('memu').textContent=(m.used_mb||0)+' MB';
+    $('mema').textContent=(m.available_mb||0)+' MB';
+    $('memt').textContent=(m.total_mb||0)+' MB';
+    $('swap').textContent=m.swap_total_mb?(m.swap_used_mb+'/'+m.swap_total_mb+' MB'):'—';
+    // disk
+    const s=d.storage||{};
+    $('disk').textContent=s.percent??'—'; setBar($('diskbar'),s.percent,s.percent||0);
+    $('du').textContent=(s.used_gb||0)+' GB';
+    $('df').textContent=(s.free_gb||0)+' GB';
+    $('dt').textContent=(s.total_gb||0)+' GB';
+    // wifi
+    const w=d.wifi||{};
+    $('sig').textContent=w.signal_dbm??'—';
+    setBar($('sigbar'),w.quality,w.quality||0);
+    $('ssid').textContent=w.ssid||(w.connected?'?':'desconectado');
+    $('freq').textContent=w.freq_mhz?w.freq_mhz+' MHz':'—';
+    $('rate').textContent=(w.rx_mbit||'—').replace('MBit/s','')+' / '+(w.tx_mbit||'—').replace('MBit/s','');
+    $('ip').textContent=w.ip||'—';
+    // procs
+    const p=d.processes||{};
+    $('procs').textContent=p.total??'—';
+    $('prun').textContent=p.running??'—';
+    // battery
+    const b=d.battery||{};
+    if(b.present){$('bat').textContent=(b.capacity!=null?b.capacity+'%':'?');
+      $('batnote').textContent=b.status||'';}
+    else{$('bat').textContent='—';$('bat').style.fontSize='1rem';
+      $('batnote').textContent=b.reason||'indisponível';}
+  }catch(e){
+    $('err').textContent='falha ao atualizar: '+e.message;
+    $('live').style.background='var(--bad)';
+  }
+}
+tick();
+let timer=setInterval(tick,3000);
+document.addEventListener('visibilitychange',()=>{
+  clearInterval(timer);
+  if(!document.hidden){tick();timer=setInterval(tick,3000);}
+});
+</script>
+</body>
+</html>
